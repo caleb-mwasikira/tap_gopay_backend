@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/caleb-mwasikira/tap_gopay_backend/database"
+	db "github.com/caleb-mwasikira/tap_gopay_backend/database"
 )
 
 type registerRequest struct {
@@ -43,36 +43,22 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = req.Validate()
-	if err != nil {
+	if err = req.Validate(); err != nil {
 		jsonResponse(w, http.StatusBadRequest, map[string]string{
 			"message": err.Error(),
 		})
 		return
 	}
 
-	ok, _ := users.Exists(req.Email)
-	if ok {
+	userExists := db.UserExists(req.Email)
+	if userExists {
 		jsonResponse(w, http.StatusConflict, map[string]string{
 			"message": "User account already exists",
 		})
 		return
 	}
 
-	user, err := database.NewUser(
-		req.Username,
-		req.Email,
-		req.Password,
-		req.PhoneNumber,
-	)
-	if err != nil {
-		jsonResponse(w, http.StatusBadRequest, map[string]string{
-			"message": err.Error(),
-		})
-		return
-	}
-
-	_, err = users.Insert(*user)
+	err = db.CreateUser(req.Username, req.Email, req.Password, req.PhoneNumber)
 	if err != nil {
 		log.Printf("Error creating user account; %v\n", err)
 		jsonResponse(w, http.StatusInternalServerError, map[string]string{
@@ -81,7 +67,9 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jsonResponse(w, http.StatusCreated, map[string]string{"message": "User registered"})
+	jsonResponse(w, http.StatusCreated, map[string]string{
+		"message": "Created user account",
+	})
 }
 
 type loginRequest struct {
@@ -113,17 +101,15 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = req.Validate()
-	if err != nil {
+	if err = req.Validate(); err != nil {
 		jsonResponse(w, http.StatusBadRequest, map[string]string{
 			"message": err.Error(),
 		})
 		return
 	}
 
-	user, err := users.Get(req.Email)
+	user, err := db.GetUser(req.Email)
 	if err != nil {
-		log.Printf("Error fetching user account; %v\n", err)
 		jsonResponse(w, http.StatusBadRequest, map[string]string{
 			"message": "Invalid username or password",
 		})
@@ -157,7 +143,9 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 		Expires: expires,
 	})
 
-	jsonResponse(w, http.StatusOK, map[string]string{"message": "Login successful"})
+	jsonResponse(w, http.StatusOK, map[string]string{
+		"message": "Login successful",
+	})
 }
 
 type forgotPasswordRequest struct {
@@ -180,8 +168,7 @@ func ForgotPasswordHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = req.Validate()
-	if err != nil {
+	if err = req.Validate(); err != nil {
 		jsonResponse(w, http.StatusBadRequest, map[string]string{
 			"message": err.Error(),
 		})
@@ -191,19 +178,17 @@ func ForgotPasswordHandler(w http.ResponseWriter, r *http.Request) {
 	// If user does not exist we still send a 200 OK response.
 	// this is done to prevent people from searching emails registered with
 	// the system via this route
-	ok, _ := users.Exists(req.Email)
-	if !ok {
-		log.Printf("Error fetching user account; %v\n", err)
+	userExists := db.UserExists(req.Email)
+	if !userExists {
 		jsonResponse(w, http.StatusOK, map[string]string{
 			"message": "Password reset token has been sent to your email",
 		})
 		return
 	}
 
-	passwordResetToken := database.NewPasswordResetToken(req.Email, 72*time.Hour)
-	_, err = passwordResetTokens.Insert(*passwordResetToken)
+	resetToken, err := db.CreatePasswordResetToken(req.Email, 72*time.Hour)
 	if err != nil {
-		log.Printf("Error saving password_reset_token; %v\n", err)
+		log.Printf("Error creating password reset token; %v\n", err)
 		jsonResponse(w, http.StatusInternalServerError, map[string]string{
 			"message": "Error creating password reset token",
 		})
@@ -211,9 +196,11 @@ func ForgotPasswordHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Launch this in goroutine so it doesn't delay our main request
-	go sendPasswordResetEmail(req.Email, passwordResetToken.Token)
+	go sendPasswordResetEmail(req.Email, resetToken.Token)
 
-	jsonResponse(w, http.StatusOK, map[string]string{"message": "Password reset token has been sent to your email"})
+	jsonResponse(w, http.StatusOK, map[string]string{
+		"message": "Password reset token has been sent to your email",
+	})
 }
 
 type passwordResetRequest struct {
@@ -243,17 +230,15 @@ func ResetPasswordHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = req.Validate()
-	if err != nil {
+	if err = req.Validate(); err != nil {
 		jsonResponse(w, http.StatusBadRequest, map[string]string{
 			"message": err.Error(),
 		})
 		return
 	}
 
-	passwordResetToken, err := passwordResetTokens.Get(req.Email, req.Token)
+	passwordResetToken, err := db.GetPasswordResetToken(req.Email, req.Token)
 	if err != nil {
-		log.Printf("Error fetching password_reset_token; %v\n", err)
 		jsonResponse(w, http.StatusNotFound, map[string]string{
 			"message": "Invalid or expired token",
 		})
@@ -267,17 +252,17 @@ func ResetPasswordHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = users.ChangePassword(req.Email, req.NewPassword)
+	err = db.ChangePassword(req.Email, req.NewPassword)
 	if err != nil {
 		log.Printf("Error changing user password; %v\n", err)
 		jsonResponse(w, http.StatusInternalServerError, map[string]string{
-			"message": "Invalid or expired token",
+			"message": "Error changing user password",
 		})
 		return
 	}
 
 	// Invalidate token to prevent re-use
-	go passwordResetTokens.Delete(req.Email, req.Token)
+	go db.DeletePasswordResetToken(req.Email, req.Token)
 
 	jsonResponse(w, http.StatusOK, map[string]string{
 		"message": "Password reset successful",

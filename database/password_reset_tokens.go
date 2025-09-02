@@ -1,7 +1,6 @@
 package database
 
 import (
-	"database/sql"
 	"fmt"
 	"math/rand/v2"
 	"time"
@@ -28,47 +27,28 @@ func generatetoken(length int) string {
 	return token
 }
 
-func NewPasswordResetToken(email string, duration time.Duration) *PasswordResetToken {
+func CreatePasswordResetToken(email string, duration time.Duration) (*PasswordResetToken, error) {
 	now := time.Now()
-	expiry_time := now.Add(duration)
-	token := generatetoken(MIN_token_LEN)
-
-	return &PasswordResetToken{
+	resetToken := PasswordResetToken{
 		Email:     email,
-		Token:     token,
-		CreatedAt: now,
-		ExpiresAt: expiry_time,
+		Token:     generatetoken(MIN_token_LEN),
+		ExpiresAt: now.Add(duration),
 	}
-}
 
-type PasswordResetModel struct {
-	db *sql.DB
-}
-
-func NewPasswordResetModel() *PasswordResetModel {
-	return &PasswordResetModel{
-		db: db,
-	}
-}
-
-func (m *PasswordResetModel) Insert(passwordResetToken PasswordResetToken) (int64, error) {
 	query := "INSERT INTO password_reset_tokens(email, token, expires_at) VALUES(?, ?, ?)"
-	result, err := m.db.Exec(
+	_, err := db.Exec(
 		query,
-		passwordResetToken.Email,
-		passwordResetToken.Token,
-		passwordResetToken.ExpiresAt,
+		email,
+		resetToken.Token,
+		resetToken.ExpiresAt,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
+	return &resetToken, err
 }
 
 // Fetches password_reset_token by user's email and token
-func (m *PasswordResetModel) Get(email, token string) (*PasswordResetToken, error) {
+func GetPasswordResetToken(email, token string) (*PasswordResetToken, error) {
 	query := "SELECT * FROM password_reset_tokens WHERE email= ? AND token= ? AND expires_at > ?"
-	row := m.db.QueryRow(query, email, token, time.Now())
+	row := db.QueryRow(query, email, token, time.Now())
 
 	passwordResetToken := PasswordResetToken{}
 	err := row.Scan(
@@ -84,15 +64,12 @@ func (m *PasswordResetModel) Get(email, token string) (*PasswordResetToken, erro
 	return &passwordResetToken, nil
 }
 
-func (m *PasswordResetModel) Delete(email, token string) (int64, error) {
+func DeletePasswordResetToken(email, token string) error {
 	query := "DELETE password_reset_tokens WHERE email=? AND token=?"
-	result, err := m.db.Exec(
+	_, err := db.Exec(
 		query,
 		email,
 		token,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
+	return err
 }

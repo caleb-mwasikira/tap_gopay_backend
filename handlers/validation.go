@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"crypto/ecdsa"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"net/mail"
 	"regexp"
@@ -63,6 +66,25 @@ func validatePhone(phone string) error {
 	re := regexp.MustCompile(`^\+?[1-9]\d{7,14}$`)
 	if !re.MatchString(phone) {
 		return fmt.Errorf("invalid phone number")
+	}
+	return nil
+}
+
+func validateECDSAPublicKey(pubKeyBytes []byte) error {
+	block, _ := pem.Decode(pubKeyBytes)
+	if block == nil || block.Type != "PUBLIC KEY" {
+		return fmt.Errorf("Invalid PEM block")
+	}
+
+	pubKey, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		return err
+	}
+
+	// Cast public key into ecdsa.PublicKey type
+	_, ok := pubKey.(*ecdsa.PublicKey)
+	if !ok {
+		return fmt.Errorf("Unsupported public key. Platform only supports ECDSA public keys")
 	}
 	return nil
 }

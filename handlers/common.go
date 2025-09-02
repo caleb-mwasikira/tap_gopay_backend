@@ -29,9 +29,6 @@ const (
 var (
 	SECRET_KEY      string
 	ANDROID_API_KEY string
-
-	users               *database.UserModel          = database.NewUserModel()
-	passwordResetTokens *database.PasswordResetModel = database.NewPasswordResetModel()
 )
 
 func init() {

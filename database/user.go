@@ -3,11 +3,11 @@ package database
 import (
 	"crypto/hmac"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 )
 
 type User struct {
+	Id       uint   `json:"id"`
 	Username string `json:"username"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
@@ -20,51 +20,28 @@ func hashPassword(password string) string {
 	return hex.EncodeToString(digest)
 }
 
-func NewUser(username, email, password, phone_no string) (*User, error) {
-	return &User{
-		Username: username,
-		Email:    email,
-		Password: hashPassword(password),
-		PhoneNo:  phone_no,
-	}, nil
-}
-
-type UserModel struct {
-	db *sql.DB
-}
-
-func NewUserModel() *UserModel {
-	return &UserModel{
-		db: db,
-	}
-}
-
-// Saves a user instance onto the database.
-//
-//	!! Make sure you create your user with NewUser() inorder
-//	for it to do password hashing
-func (m *UserModel) Insert(user User) (int64, error) {
+// Creates a new user and saves them to the database.
+// Hashes the password before saving it to the database.
+func CreateUser(username, email, password, phoneNo string) error {
 	query := "INSERT INTO users(username, email, password, phone_no) VALUES(?, ?, ?, ?)"
-	result, err := m.db.Exec(
+	_, err := db.Exec(
 		query,
-		user.Username,
-		user.Email,
-		user.Password,
-		user.PhoneNo,
+		username,
+		email,
+		hashPassword(password),
+		phoneNo,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
+	return err
 }
 
 // Fetches user by their email
-func (m *UserModel) Get(email string) (*User, error) {
-	query := "SELECT username, email, password, phone_no FROM users WHERE email = ?"
-	row := m.db.QueryRow(query, email)
+func GetUser(email string) (*User, error) {
+	query := "SELECT id, username, email, password, phone_no FROM users WHERE email = ?"
+	row := db.QueryRow(query, email)
 
 	user := User{}
 	err := row.Scan(
+		&user.Id,
 		&user.Username,
 		&user.Email,
 		&user.Password,
@@ -76,27 +53,24 @@ func (m *UserModel) Get(email string) (*User, error) {
 	return &user, nil
 }
 
-func (m *UserModel) Exists(email string) (bool, error) {
+func UserExists(email string) bool {
 	var exists bool
 	query := `SELECT EXISTS(SELECT 1 FROM users WHERE email = ?)`
 	err := db.QueryRow(query, email).Scan(&exists)
 	if err != nil {
-		return false, err
+		return false
 	}
-	return exists, nil
+	return exists
 }
 
 // Changes a user's password. Hashes the password for you; you can pass
 // in the password as plaintext
-func (m *UserModel) ChangePassword(email string, newPassword string) (int64, error) {
+func ChangePassword(email string, newPassword string) error {
 	query := "UPDATE users SET password = ? WHERE email = ?"
-	result, err := m.db.Exec(
+	_, err := db.Exec(
 		query,
 		hashPassword(newPassword),
 		email,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
+	return err
 }
