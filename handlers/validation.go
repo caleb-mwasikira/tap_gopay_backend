@@ -1,18 +1,20 @@
 package handlers
 
 import (
-	"crypto/ecdsa"
-	"crypto/x509"
-	"encoding/pem"
+	"encoding/hex"
 	"fmt"
 	"net/mail"
 	"regexp"
 	"strings"
+
+	"github.com/caleb-mwasikira/tap_gopay_backend/encrypt"
 )
 
 const (
-	MIN_NAME_LEN     = 4
-	MIN_PASSWORD_LEN = 8
+	MIN_NAME_LEN            = 4
+	MIN_PASSWORD_LEN        = 8
+	MIN_AMOUNT              = 1
+	CURRENCY_CODE    string = "KES"
 )
 
 func isEmpty(value string) bool {
@@ -71,20 +73,32 @@ func validatePhone(phone string) error {
 }
 
 func validateECDSAPublicKey(pubKeyBytes []byte) error {
-	block, _ := pem.Decode(pubKeyBytes)
-	if block == nil || block.Type != "PUBLIC KEY" {
-		return fmt.Errorf("Invalid PEM block")
-	}
+	_, err := encrypt.LoadPublicKeyFromBytes(pubKeyBytes)
+	return err
+}
 
-	pubKey, err := x509.ParsePKIXPublicKey(block.Bytes)
+func validateAmount(amount float64) error {
+	if amount < MIN_AMOUNT {
+		return fmt.Errorf("minimum transferrable amount is %v %v", MIN_AMOUNT, CURRENCY_CODE)
+	}
+	return nil
+}
+
+// Hex-decodes a signature value
+func validateSignature(signature string) ([]byte, error) {
+	sig, err := hex.DecodeString(signature)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("server expects hex-encoded signatures")
 	}
+	return sig, nil
+}
 
-	// Cast public key into ecdsa.PublicKey type
-	_, ok := pubKey.(*ecdsa.PublicKey)
-	if !ok {
-		return fmt.Errorf("Unsupported public key. Platform only supports ECDSA public keys")
+func validateCreditCardNo(cardNo string) error {
+	// TODO: Implement credit card_no validation using the Luhn algorithm
+
+	cardNo = strings.TrimSpace(cardNo)
+	if len(cardNo) < CREDIT_CARD_MIN_LEN {
+		return fmt.Errorf("credit card number too short")
 	}
 	return nil
 }

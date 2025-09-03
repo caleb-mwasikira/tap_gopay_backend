@@ -13,17 +13,10 @@ const (
 	LOGIN_COOKIE string = "LOGIN_COOKIE"
 )
 
-func GenerateAndroidApiKey() string {
-	if strings.TrimSpace(ANDROID_API_KEY) == "" {
-		return ""
-	}
-	b64EncodedData := base64.StdEncoding.EncodeToString([]byte(ANDROID_API_KEY))
-	return b64EncodedData
-}
-
+// Restricts access to a route unless client request has embedded
+// ANDROID_API_KEY in their Authorization header
 func RequireAndroidApiKeyMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Fetch ANDROID_API_KEY from Authorization headers
 		authHeader := r.Header.Get("Authorization")
 		fields := strings.Split(authHeader, " ")
 		if len(fields) != 2 {
