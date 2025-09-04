@@ -3,9 +3,6 @@ package tests
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
-	"io"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -43,22 +40,6 @@ func TestRegister(t *testing.T) {
 	defer resp.Body.Close()
 
 	expectStatus(t, resp, http.StatusOK)
-}
-
-// Prints the response to stdout.
-// And since we can't read the response body more than once,
-// we return the body
-func printResponse(resp *http.Response) []byte {
-	fmt.Println()
-	fmt.Printf("%v\n", resp.Status)
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatalf("Error reading response body; %v\n", err)
-	}
-	fmt.Printf("Body:\n%s\n", string(body))
-
-	return body
 }
 
 // Checks the response for expected status code.

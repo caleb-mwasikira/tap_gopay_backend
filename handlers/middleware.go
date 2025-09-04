@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/caleb-mwasikira/tap_gopay_backend/api"
 	"github.com/caleb-mwasikira/tap_gopay_backend/database"
 )
 
@@ -20,7 +21,7 @@ func RequireAndroidApiKeyMiddleware(next http.Handler) http.Handler {
 		authHeader := r.Header.Get("Authorization")
 		fields := strings.Split(authHeader, " ")
 		if len(fields) != 2 {
-			jsonResponse(w, http.StatusBadRequest, map[string]string{"message": "Invalid Authorization header format"})
+			api.BadRequest(w, "Invalid Authorization header format")
 			return
 		}
 
@@ -28,12 +29,12 @@ func RequireAndroidApiKeyMiddleware(next http.Handler) http.Handler {
 		b64EncodedData := fields[1]
 		androidApiKey, err := base64.StdEncoding.DecodeString(b64EncodedData)
 		if err != nil {
-			jsonResponse(w, http.StatusBadRequest, map[string]string{"message": "Invalid Authorization value. Expected base64-encoded string"})
+			api.BadRequest(w, "Invalid Authorization value. Expected base64-encoded string")
 			return
 		}
 
 		if ANDROID_API_KEY != string(androidApiKey) {
-			jsonResponse(w, http.StatusUnauthorized, map[string]string{"message": "You are not authorized to access this resource"})
+			api.Unauthorized(w)
 			return
 		}
 
@@ -46,7 +47,7 @@ func RequireAuthMiddleware(next http.Handler) http.Handler {
 		// Fetch access token from user's cookies
 		cookie, err := r.Cookie(LOGIN_COOKIE)
 		if err != nil {
-			jsonResponse(w, http.StatusUnauthorized, map[string]string{"message": "Access to this route requires user login"})
+			api.Unauthorized2(w, "Access to this route requires user login")
 			return
 		}
 
@@ -54,7 +55,7 @@ func RequireAuthMiddleware(next http.Handler) http.Handler {
 
 		var user database.User
 		if !validToken(accessToken, &user) {
-			jsonResponse(w, http.StatusUnauthorized, map[string]string{"message": "Access to this route requires user login"})
+			api.Unauthorized2(w, "Access to this route requires user login")
 			return
 		}
 

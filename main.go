@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/caleb-mwasikira/tap_gopay_backend/api"
+	"github.com/caleb-mwasikira/tap_gopay_backend/handlers"
 )
 
 func main() {
@@ -14,7 +15,7 @@ func main() {
 	address := "127.0.0.1:5000"
 	log.Printf("Starting web server on http://%v\n", address)
 
-	r := api.GetRoutes()
+	r := handlers.GetRoutes()
 	err := http.ListenAndServe(address, r)
 	if err != nil {
 		log.Fatalf("Error starting web server; %v\n", err)

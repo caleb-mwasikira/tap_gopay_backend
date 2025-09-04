@@ -15,11 +15,11 @@ import (
 
 	"github.com/caleb-mwasikira/tap_gopay_backend/database"
 	"github.com/caleb-mwasikira/tap_gopay_backend/encrypt"
-	h "github.com/caleb-mwasikira/tap_gopay_backend/handlers"
+	"github.com/caleb-mwasikira/tap_gopay_backend/handlers"
 )
 
 func requireLogin(email, password, serverUrl string) {
-	req := h.LoginRequest{
+	req := handlers.LoginRequest{
 		Email:    email,
 		Password: password,
 	}
@@ -67,7 +67,7 @@ func TestNewCreditCardHandler(t *testing.T) {
 	var buff bytes.Buffer
 	multiPartWriter := multipart.NewWriter(&buff)
 
-	writer, err := multiPartWriter.CreateFormFile(h.PUB_KEY_FIELDNAME, ".pub")
+	writer, err := multiPartWriter.CreateFormFile(handlers.PUB_KEY_FIELD, ".pub")
 	if err != nil {
 		t.Fatalf("Error creating multipart form file; %v\n", err)
 	}
@@ -189,7 +189,7 @@ func TestFreezeCreditCardHandler(t *testing.T) {
 
 	log.Printf("Freezing credit card %v\n", creditCard.CardNo)
 
-	req := h.CreditCardRequest{
+	req := handlers.CreditCardRequest{
 		CardNo: creditCard.CardNo,
 	}
 	body, err := json.Marshal(&req)

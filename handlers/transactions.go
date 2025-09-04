@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/caleb-mwasikira/tap_gopay_backend/api"
 	"github.com/caleb-mwasikira/tap_gopay_backend/database"
 	"github.com/caleb-mwasikira/tap_gopay_backend/encrypt"
 )
@@ -65,28 +66,22 @@ func (req SendFundsRequest) Hash() []byte {
 	return h[:]
 }
 
-func SendFundsHandler(w http.ResponseWriter, r *http.Request) {
+func SendFunds(w http.ResponseWriter, r *http.Request) {
 	user, ok := getAuthUser(r)
 	if !ok {
-		jsonResponse(w, http.StatusBadRequest, map[string]string{
-			"message": "You are not authorized to view this resource",
-		})
+		api.Unauthorized(w)
 		return
 	}
 
 	var req SendFundsRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		jsonResponse(w, http.StatusBadRequest, map[string]string{
-			"message": "sender, receiver, amount, created_at and signature fields required",
-		})
+		api.BadRequest(w, "sender, receiver, amount, created_at and signature fields required")
 		return
 	}
 
 	if err := req.Validate(); err != nil {
-		jsonResponse(w, http.StatusBadRequest, map[string]string{
-			"message": err.Error(),
-		})
+		api.BadRequest(w, err.Error())
 		return
 	}
 
@@ -94,18 +89,14 @@ func SendFundsHandler(w http.ResponseWriter, r *http.Request) {
 	// credit card is still active
 	sendersCard, err := database.GetCreditCard(user.Id, req.Sender, true)
 	if err != nil {
-		jsonResponse(w, http.StatusInternalServerError, map[string]string{
-			"message": "Error transferring funds",
-		})
+		api.Errorf(w, "Error transferring funds", err)
 		return
 	}
 
 	// Load sender's public key to verify signature on send funds request
 	sendersPubKey, err := encrypt.LoadPublicKeyFromBytes(sendersCard.PublicKey)
 	if err != nil {
-		jsonResponse(w, http.StatusInternalServerError, map[string]string{
-			"message": "Error decoding senders public key",
-		})
+		api.Errorf(w, "Error decoding senders public key", err)
 		return
 	}
 
@@ -115,9 +106,7 @@ func SendFundsHandler(w http.ResponseWriter, r *http.Request) {
 
 	ok = ecdsa.VerifyASN1(sendersPubKey, digest, req.signature)
 	if !ok {
-		jsonResponse(w, http.StatusBadRequest, map[string]string{
-			"message": "Error transferring funds. Signature verification failed",
-		})
+		api.Errorf(w, "Error transferring funds. Signature verification failed", nil)
 		return
 	}
 
@@ -126,17 +115,11 @@ func SendFundsHandler(w http.ResponseWriter, r *http.Request) {
 		req.CreatedAt, req.Signature,
 	)
 	if err != nil {
-		log.Printf("Error transferring funds; %v\n", err)
-
-		jsonResponse(w, http.StatusInternalServerError, map[string]string{
-			"message": "Error transferring funds",
-		})
+		api.Errorf(w, "Error transferring funds", err)
 		return
 	}
 
-	jsonResponse(w, http.StatusOK, map[string]string{
-		"message": "Transaction completed successfully",
-	})
+	api.OK(w, "Transaction completed successfully")
 }
 
 type requestFundsRequest struct {
@@ -175,45 +158,35 @@ func (req *requestFundsRequest) Validate() error {
 }
 
 // A user can request funds from another user
-func RequestFundsHandler(w http.ResponseWriter, r *http.Request) {
+func RequestFunds(w http.ResponseWriter, r *http.Request) {
 	user, ok := getAuthUser(r)
 	if !ok {
-		jsonResponse(w, http.StatusBadRequest, map[string]string{
-			"message": "You are not authorized to view this resource",
-		})
+		api.Unauthorized(w)
 		return
 	}
 
 	var req requestFundsRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		jsonResponse(w, http.StatusBadRequest, map[string]string{
-			"message": "sender, receiver, amount and signature fields required",
-		})
+		api.BadRequest(w, "sender, receiver, amount and signature fields required")
 		return
 	}
 
 	if err := req.Validate(); err != nil {
-		jsonResponse(w, http.StatusBadRequest, map[string]string{
-			"message": err.Error(),
-		})
+		api.BadRequest(w, err.Error())
 		return
 	}
 
 	// Check if receiver's credit card belongs to currently logged in user
 	receiversCard, err := database.GetCreditCard(user.Id, req.Receiver, true)
 	if err != nil {
-		jsonResponse(w, http.StatusInternalServerError, map[string]string{
-			"message": "Error requesting funds",
-		})
+		api.Errorf(w, "Error requesting funds", err)
 		return
 	}
 
 	receiversPubKey, err := encrypt.LoadPublicKeyFromBytes(receiversCard.PublicKey)
 	if err != nil {
-		jsonResponse(w, http.StatusInternalServerError, map[string]string{
-			"message": "Error decoding receiver's public key",
-		})
+		api.Errorf(w, "Error decoding receiver's public key", err)
 		return
 	}
 
@@ -226,9 +199,7 @@ func RequestFundsHandler(w http.ResponseWriter, r *http.Request) {
 
 	ok = ecdsa.VerifyASN1(receiversPubKey, digest, req.signature)
 	if !ok {
-		jsonResponse(w, http.StatusBadRequest, map[string]string{
-			"message": "Error requesting funds. Signature verification failed",
-		})
+		api.Errorf(w, "Error requesting funds. Signature verification failed", nil)
 		return
 	}
 
@@ -238,13 +209,9 @@ func RequestFundsHandler(w http.ResponseWriter, r *http.Request) {
 		req.CreatedAt, req.Signature,
 	)
 	if err != nil {
-		jsonResponse(w, http.StatusInternalServerError, map[string]string{
-			"message": "Error requesting funds",
-		})
+		api.Errorf(w, "Error requesting funds", err)
 		return
 	}
 
-	jsonResponse(w, http.StatusOK, map[string]string{
-		"message": "Funds requested successfully",
-	})
+	api.OK(w, "Funds requested successfully")
 }
