@@ -2,10 +2,11 @@ package tests
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/rand/v2"
+	mrand "math/rand/v2"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -58,7 +59,7 @@ func TestNewCreditCardHandler(t *testing.T) {
 
 	// Creating a new credit card requires sending an ecdsa.PublicKey
 	// to the server
-	privKey, pubKey, err := encrypt.GenerateKeyPair()
+	privKey, pubKey, err := encrypt.GenerateKeyPair(rand.Reader)
 	if err != nil {
 		t.Fatalf("Unexpected error generating key pair; %v", err)
 	}
@@ -147,7 +148,7 @@ func randomChoice[T any](items []T) *T {
 	if len(items) == 0 {
 		return nil
 	}
-	index := rand.IntN(len(items))
+	index := mrand.IntN(len(items))
 	item := items[index]
 	return &item
 }

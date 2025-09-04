@@ -3,10 +3,10 @@ package encrypt
 import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
-	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"log"
 	"os"
 )
@@ -16,11 +16,11 @@ var (
 	ErrUnsupportedPrivateKey error = fmt.Errorf("invalid PEM block or block type. Server expects 'EC PRIVATE KEY' PEM block type")
 )
 
-func GenerateKeyPair() (*ecdsa.PrivateKey, *ecdsa.PublicKey, error) {
+func GenerateKeyPair(rand io.Reader) (*ecdsa.PrivateKey, *ecdsa.PublicKey, error) {
 	log.Println("Generating EC key pair...")
 
 	// Use P256 curve (secure and widely used)
-	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -28,7 +28,7 @@ func GenerateKeyPair() (*ecdsa.PrivateKey, *ecdsa.PublicKey, error) {
 	return privateKey, &privateKey.PublicKey, nil
 }
 
-func pemEncodePrivateKey(privKey *ecdsa.PrivateKey) ([]byte, error) {
+func PemEncodePrivateKey(privKey *ecdsa.PrivateKey) ([]byte, error) {
 	derBytes, err := x509.MarshalECPrivateKey(privKey)
 	if err != nil {
 		return nil, err
@@ -44,7 +44,7 @@ func pemEncodePrivateKey(privKey *ecdsa.PrivateKey) ([]byte, error) {
 func SavePrivateKeyToFile(privKey *ecdsa.PrivateKey, path string, overwrite bool) error {
 	log.Printf("Saving EC private key to file; '%v'\n", path)
 
-	privKeyBytes, err := pemEncodePrivateKey(privKey)
+	privKeyBytes, err := PemEncodePrivateKey(privKey)
 	if err != nil {
 		return err
 	}
