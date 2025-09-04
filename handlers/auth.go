@@ -11,26 +11,10 @@ import (
 )
 
 type RegisterRequest struct {
-	Username string `json:"username"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
-	PhoneNo  string `json:"phone_no"`
-}
-
-func (req RegisterRequest) Validate() error {
-	if err := validateName("username", req.Username); err != nil {
-		return err
-	}
-	if err := validateEmail(req.Email); err != nil {
-		return err
-	}
-	if err := validatePassword(req.Password); err != nil {
-		return err
-	}
-	if err := validatePhone(req.PhoneNo); err != nil {
-		return err
-	}
-	return nil
+	Username string `json:"username" validate:"min=3,max=30"`
+	Email    string `json:"email" validate:"email"`
+	Password string `json:"password" validate:"password"`
+	PhoneNo  string `json:"phone_no" validate:"phone_no"`
 }
 
 func Register(w http.ResponseWriter, r *http.Request) {
@@ -42,8 +26,8 @@ func Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err = req.Validate(); err != nil {
-		api.BadRequest(w, err.Error())
+	if errs := validateStruct(req); len(errs) > 0 {
+		api.BadRequest2(w, errs)
 		return
 	}
 
@@ -63,21 +47,8 @@ func Register(w http.ResponseWriter, r *http.Request) {
 }
 
 type LoginRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
-}
-
-func (req LoginRequest) Validate() error {
-	err := validateEmail(req.Email)
-	if err != nil {
-		return err
-	}
-
-	err = validatePassword(req.Password)
-	if err != nil {
-		return err
-	}
-	return nil
+	Email    string `json:"email" validate:"email"`
+	Password string `json:"password" validate:"password"`
 }
 
 func Login(w http.ResponseWriter, r *http.Request) {
@@ -89,8 +60,8 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err = req.Validate(); err != nil {
-		api.BadRequest(w, err.Error())
+	if errs := validateStruct(req); len(errs) > 0 {
+		api.BadRequest2(w, errs)
 		return
 	}
 
@@ -108,7 +79,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 
 	accessToken, err := generateToken(*user)
 	if err != nil {
-		api.Errorf(w, "Error logging in user", fmt.Errorf("Error generating JWT; %v", err))
+		api.Errorf(w, "Error logging in user", fmt.Errorf("error generating JWT; %v", err))
 		return
 	}
 
@@ -126,12 +97,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 }
 
 type forgotPasswordRequest struct {
-	Email string `json:"email"`
-}
-
-func (req forgotPasswordRequest) Validate() error {
-	err := validateEmail(req.Email)
-	return err
+	Email string `json:"email" validate:"email"`
 }
 
 func ForgotPassword(w http.ResponseWriter, r *http.Request) {
@@ -143,8 +109,8 @@ func ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err = req.Validate(); err != nil {
-		api.BadRequest(w, err.Error())
+	if errs := validateStruct(req); len(errs) > 0 {
+		api.BadRequest2(w, errs)
 		return
 	}
 
@@ -170,19 +136,9 @@ func ForgotPassword(w http.ResponseWriter, r *http.Request) {
 }
 
 type passwordResetRequest struct {
-	Email       string `json:"email"`
+	Email       string `json:"email" validate:"email"`
 	Token       string `json:"token"`
-	NewPassword string `json:"new_password"`
-}
-
-func (req passwordResetRequest) Validate() error {
-	if err := validateEmail(req.Email); err != nil {
-		return err
-	}
-	if err := validatePassword(req.NewPassword); err != nil {
-		return err
-	}
-	return nil
+	NewPassword string `json:"new_password" validate:"password"`
 }
 
 func ResetPassword(w http.ResponseWriter, r *http.Request) {
@@ -194,8 +150,8 @@ func ResetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err = req.Validate(); err != nil {
-		api.BadRequest(w, err.Error())
+	if errs := validateStruct(req); len(errs) > 0 {
+		api.BadRequest2(w, errs)
 		return
 	}
 

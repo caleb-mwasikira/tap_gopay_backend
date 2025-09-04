@@ -5,8 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
-	"log"
 	"net/http"
 
 	"github.com/caleb-mwasikira/tap_gopay_backend/api"
@@ -15,38 +13,14 @@ import (
 )
 
 type SendFundsRequest struct {
-	Sender    string  `json:"sender"`
-	Receiver  string  `json:"receiver"`
-	Amount    float64 `json:"amount"`
+	Sender    string  `json:"sender" validate:"card_no"`
+	Receiver  string  `json:"receiver" validate:"card_no"`
+	Amount    float64 `json:"amount" validate:"amount"`
 	CreatedAt string  `json:"created_at"` // ISO 8601 string
 
 	// Hex encoded signature
 	// Request signed by sender
-	Signature string `json:"signature"`
-
-	signature []byte
-}
-
-func (req *SendFundsRequest) Validate() error {
-	if err := validateCreditCardNo(req.Sender); err != nil {
-		return err
-	}
-	if err := validateCreditCardNo(req.Receiver); err != nil {
-		return err
-	}
-	if req.Sender == req.Receiver {
-		return fmt.Errorf("sender and receiver cannot be the same account")
-	}
-	if err := validateAmount(req.Amount); err != nil {
-		return err
-	}
-
-	signature, err := validateSignature(req.Signature)
-	if err != nil {
-		return err
-	}
-	req.signature = signature
-	return nil
+	Signature string `json:"signature" validate:"signature"`
 }
 
 func (req SendFundsRequest) Hash() []byte {
@@ -80,8 +54,8 @@ func SendFunds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := req.Validate(); err != nil {
-		api.BadRequest(w, err.Error())
+	if errs := validateStruct(req); len(errs) > 0 {
+		api.BadRequest2(w, errs)
 		return
 	}
 
@@ -100,11 +74,14 @@ func SendFunds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	digest := req.Hash()
-	hexDigest := hex.EncodeToString(digest)
-	log.Println("Hash server side: ", hexDigest)
+	signature, err := hex.DecodeString(req.Signature)
+	if err != nil {
+		api.BadRequest(w, "Error transferring funds. Invalid signature")
+		return
+	}
 
-	ok = ecdsa.VerifyASN1(sendersPubKey, digest, req.signature)
+	digest := req.Hash()
+	ok = ecdsa.VerifyASN1(sendersPubKey, digest, signature)
 	if !ok {
 		api.Errorf(w, "Error transferring funds. Signature verification failed", nil)
 		return
@@ -122,41 +99,6 @@ func SendFunds(w http.ResponseWriter, r *http.Request) {
 	api.OK(w, "Transaction completed successfully")
 }
 
-type requestFundsRequest struct {
-	Sender    string  `json:"sender"`   // One being asked to pay
-	Receiver  string  `json:"receiver"` // One asking for funds
-	Amount    float64 `json:"amount"`
-	CreatedAt string  `json:"created_at"` // ISO 8601 string
-
-	// Hex-encoded signature
-	// Receiver is the one who signs the request this time
-	Signature string `json:"signature"`
-
-	signature []byte
-}
-
-func (req *requestFundsRequest) Validate() error {
-	if err := validateCreditCardNo(req.Sender); err != nil {
-		return err
-	}
-	if err := validateCreditCardNo(req.Receiver); err != nil {
-		return err
-	}
-	if req.Sender == req.Receiver {
-		return fmt.Errorf("sender and receiver cannot be the same account")
-	}
-	if err := validateAmount(req.Amount); err != nil {
-		return err
-	}
-
-	signature, err := validateSignature(req.Signature)
-	if err != nil {
-		return err
-	}
-	req.signature = signature
-	return nil
-}
-
 // A user can request funds from another user
 func RequestFunds(w http.ResponseWriter, r *http.Request) {
 	user, ok := getAuthUser(r)
@@ -165,15 +107,15 @@ func RequestFunds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req requestFundsRequest
+	var req SendFundsRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		api.BadRequest(w, "sender, receiver, amount and signature fields required")
 		return
 	}
 
-	if err := req.Validate(); err != nil {
-		api.BadRequest(w, err.Error())
+	if errs := validateStruct(req); len(errs) > 0 {
+		api.BadRequest2(w, errs)
 		return
 	}
 
@@ -190,14 +132,14 @@ func RequestFunds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Hash request data and verify receiver's signature
-	hash := sha256.New()
-	hash.Write([]byte(req.Sender))
-	hash.Write([]byte(req.Receiver))
-	hash.Write([]byte(fmt.Sprintf("%f", req.Amount)))
-	digest := hash.Sum(nil)
+	signature, err := hex.DecodeString(req.Signature)
+	if err != nil {
+		api.BadRequest(w, "Error transferring funds. Invalid signature")
+		return
+	}
 
-	ok = ecdsa.VerifyASN1(receiversPubKey, digest, req.signature)
+	digest := req.Hash()
+	ok = ecdsa.VerifyASN1(receiversPubKey, digest, signature)
 	if !ok {
 		api.Errorf(w, "Error requesting funds. Signature verification failed", nil)
 		return

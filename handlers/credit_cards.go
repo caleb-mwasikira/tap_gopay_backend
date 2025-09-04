@@ -60,7 +60,7 @@ func NewCreditCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := validateECDSAPublicKey(pubKeyBytes); err != nil {
+	if err := validatePublicKey(pubKeyBytes); err != nil {
 		api.BadRequest(w, err.Error())
 		return
 	}
@@ -76,14 +76,6 @@ func NewCreditCard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	api.OK2(w, creditCard)
-}
-
-type CreditCardRequest struct {
-	CardNo string `json:"card_no"`
-}
-
-func (req CreditCardRequest) Validate() error {
-	return validateCreditCardNo(req.CardNo)
 }
 
 // Fetch all credit cards associated with currently logged in user
@@ -103,6 +95,10 @@ func GetCreditCards(w http.ResponseWriter, r *http.Request) {
 	api.OK2(w, creditCards)
 }
 
+type CreditCardRequest struct {
+	CardNo string `json:"card_no" validate:"card_no"`
+}
+
 func FreezeCreditCard(w http.ResponseWriter, r *http.Request) {
 	user, ok := getAuthUser(r)
 	if !ok {
@@ -117,8 +113,8 @@ func FreezeCreditCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := req.Validate(); err != nil {
-		api.BadRequest(w, err.Error())
+	if errs := validateStruct(req); len(errs) > 0 {
+		api.BadRequest2(w, errs)
 		return
 	}
 
@@ -145,8 +141,8 @@ func ActivateCreditCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := req.Validate(); err != nil {
-		api.BadRequest(w, err.Error())
+	if errs := validateStruct(req); len(errs) > 0 {
+		api.BadRequest2(w, errs)
 		return
 	}
 

@@ -37,6 +37,15 @@ func BadRequest(w http.ResponseWriter, format string, args ...any) {
 	})
 }
 
+// Returns 400 BadRequest response to the user.
+// Use this when you want to returns validation errors to the
+// user as and array/obj
+func BadRequest2(w http.ResponseWriter, data any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusBadRequest)
+	json.NewEncoder(w).Encode(data)
+}
+
 // Returns a 500 InternalServerError response to user
 func Errorf(w http.ResponseWriter, message string, err error) {
 	w.Header().Set("Content-Type", "application/json")

@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/brianvoe/gofakeit/v6"
-	h "github.com/caleb-mwasikira/tap_gopay_backend/handlers"
+	"github.com/caleb-mwasikira/tap_gopay_backend/handlers"
 )
 
 var (
@@ -18,24 +18,41 @@ var (
 	testPhoneNo  string = gofakeit.Phone()
 )
 
+func register(url string, req handlers.RegisterRequest) (*http.Response, error) {
+	body, err := json.Marshal(&req)
+	if err != nil {
+		return nil, err
+	}
+	return http.Post(url, jsonContentType, bytes.NewBuffer(body))
+}
+
 func TestRegister(t *testing.T) {
 	testServer := httptest.NewServer(r)
 	defer testServer.Close()
 
-	req := h.RegisterRequest{
+	url := testServer.URL + "/auth/register"
+
+	// Create an account with invalid credentials
+	var req handlers.RegisterRequest
+
+	resp, err := register(url, req)
+	if err != nil {
+		t.Fatalf("Error making request; %v\n", err)
+	}
+
+	expectStatus(t, resp, http.StatusBadRequest)
+	resp.Body.Close()
+
+	// Create account with valid credentials
+	req = handlers.RegisterRequest{
 		Username: "fake_" + gofakeit.Name(),
 		Email:    gofakeit.Email(),
 		Password: "password1234",
 		PhoneNo:  testPhoneNo,
 	}
-	body, err := json.Marshal(&req)
+	resp, err = register(url, req)
 	if err != nil {
-		t.Fatalf("Error marshalling register request; %v\n", err)
-	}
-
-	resp, err := http.Post(testServer.URL+"/auth/register", jsonContentType, bytes.NewBuffer(body))
-	if err != nil {
-		t.Fatalf("Error making register request; %v\n", err)
+		t.Fatalf("Error making request; %v\n", err)
 	}
 	defer resp.Body.Close()
 
@@ -68,7 +85,7 @@ func TestLogin(t *testing.T) {
 	resp.Body.Close()
 
 	// Login
-	req := h.LoginRequest{
+	req := handlers.LoginRequest{
 		Email:    testEmail,
 		Password: testPassword,
 	}
@@ -89,13 +106,13 @@ func TestLogin(t *testing.T) {
 	var loginCookie *http.Cookie
 
 	for _, cookie := range cookies {
-		if cookie.Name == h.LOGIN_COOKIE {
+		if cookie.Name == handlers.LOGIN_COOKIE {
 			loginCookie = cookie
 			break
 		}
 	}
 	if loginCookie == nil {
-		t.Fatalf("Expected %v in response but cookie NOT found\n", h.LOGIN_COOKIE)
+		t.Fatalf("Expected %v in response but cookie NOT found\n", handlers.LOGIN_COOKIE)
 	}
 
 	// Set cookies
