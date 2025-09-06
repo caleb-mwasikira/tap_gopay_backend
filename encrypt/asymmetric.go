@@ -12,6 +12,7 @@ import (
 )
 
 var (
+	ErrKeyNotFound           error = fmt.Errorf("no key found")
 	ErrUnsupportedPublicKey  error = fmt.Errorf("invalid PEM block or block type. Server expects 'EC PUBLIC KEY' PEM block type")
 	ErrUnsupportedPrivateKey error = fmt.Errorf("invalid PEM block or block type. Server expects 'EC PRIVATE KEY' PEM block type")
 )
@@ -81,36 +82,14 @@ func PemEncodePublicKey(pubKey *ecdsa.PublicKey) ([]byte, error) {
 	return pem.EncodeToMemory(&block), nil
 }
 
-func SavePublicKeyToFile(pubKey *ecdsa.PublicKey, path string, overwrite bool) error {
-	log.Printf("Saving EC public key to file; '%v'\n", path)
-
-	pubKeyBytes, err := PemEncodePublicKey(pubKey)
-	if err != nil {
-		return err
-	}
-
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0700)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	stat, err := file.Stat()
-	if err != nil {
-		return err
-	}
-
-	fileEmpty := stat.Size() == 0
-	if fileEmpty || overwrite {
-		_, err = file.Write(pubKeyBytes)
-	}
-	return err
-}
-
 func LoadPrivateKeyFromFile(path string) (*ecdsa.PrivateKey, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(data) == 0 {
+		return nil, ErrKeyNotFound
 	}
 
 	block, _ := pem.Decode(data)

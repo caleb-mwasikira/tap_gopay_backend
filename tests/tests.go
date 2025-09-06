@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/cookiejar"
+	"testing"
 
 	"github.com/caleb-mwasikira/tap_gopay_backend/handlers"
 	"github.com/go-chi/chi/v5"
@@ -54,4 +55,12 @@ func printResponse(resp *http.Response) []byte {
 	fmt.Println(COLOR_RESET)
 
 	return body
+}
+
+// Checks the response for expected status code.
+// Fails if response status code does NOT match expected status code.
+func expectStatus(t *testing.T, gotStatusCode, expectedStatusCode int) {
+	if gotStatusCode != expectedStatusCode {
+		t.Fatalf("Expected statusCode %v but got %v\n", expectedStatusCode, gotStatusCode)
+	}
 }

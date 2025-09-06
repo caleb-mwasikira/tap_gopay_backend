@@ -3,22 +3,18 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"math/rand/v2"
 	"net/http"
 	"strings"
 
 	"github.com/caleb-mwasikira/tap_gopay_backend/api"
 	"github.com/caleb-mwasikira/tap_gopay_backend/database"
+	"github.com/go-chi/chi/v5"
 )
 
 const (
 	CREDIT_CARD_MIN_LEN         int     = 12
 	CREDIT_CARD_INITIAL_DEPOSIT float64 = 100
-
-	// Field name given to the public key a client uploads
-	// when creating a new credit card
-	PUB_KEY_FIELD string = "public_key"
 )
 
 func generateCreditCardNo() string {
@@ -40,35 +36,9 @@ func NewCreditCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := r.ParseMultipartForm(10 << 20) // 10MB
-	if err != nil {
-		api.BadRequest(w, "Error parsing multipart/form-data")
-		return
-	}
-
-	file, _, err := r.FormFile(PUB_KEY_FIELD)
-	if err != nil {
-		api.BadRequest(w, "Missing %v file upload", PUB_KEY_FIELD)
-		return
-	}
-	defer file.Close()
-
-	pubKeyBytes, err := io.ReadAll(file)
-	if err != nil {
-		message := fmt.Sprintf("Error reading %v file upload", PUB_KEY_FIELD)
-		api.Errorf(w, message, err)
-		return
-	}
-
-	if err := validatePublicKey(pubKeyBytes); err != nil {
-		api.BadRequest(w, err.Error())
-		return
-	}
-
 	cardNo := generateCreditCardNo()
 	creditCard, err := database.CreateCreditCard(
-		user.Id, cardNo,
-		CREDIT_CARD_INITIAL_DEPOSIT, pubKeyBytes,
+		user.Id, cardNo, CREDIT_CARD_INITIAL_DEPOSIT,
 	)
 	if err != nil {
 		api.Errorf(w, "Error creating credit card", err)
@@ -79,7 +49,7 @@ func NewCreditCard(w http.ResponseWriter, r *http.Request) {
 }
 
 // Fetch all credit cards associated with currently logged in user
-func GetCreditCards(w http.ResponseWriter, r *http.Request) {
+func GetAllCreditCards(w http.ResponseWriter, r *http.Request) {
 	user, ok := getAuthUser(r)
 	if !ok {
 		api.Unauthorized(w)
@@ -93,6 +63,28 @@ func GetCreditCards(w http.ResponseWriter, r *http.Request) {
 	}
 
 	api.OK2(w, creditCards)
+}
+
+func GetCreditCard(w http.ResponseWriter, r *http.Request) {
+	user, ok := getAuthUser(r)
+	if !ok {
+		api.Unauthorized(w)
+		return
+	}
+
+	cardNo := chi.URLParam(r, "card_no")
+	if err := validateCreditCardNo(cardNo); err != nil {
+		api.BadRequest(w, err.Error())
+		return
+	}
+
+	creditCard, err := database.GetCreditCard(user.Id, cardNo)
+	if err != nil {
+		api.Errorf(w, "Error fetching credit card details", err)
+		return
+	}
+
+	api.OK2(w, creditCard)
 }
 
 type CreditCardRequest struct {
@@ -124,7 +116,7 @@ func FreezeCreditCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	api.OK(w, "Credit card deactivated successfully")
+	api.OK(w, fmt.Sprintf("Credit card %v deactivated successfully", req.CardNo))
 }
 
 func ActivateCreditCard(w http.ResponseWriter, r *http.Request) {
@@ -152,5 +144,5 @@ func ActivateCreditCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	api.OK(w, "Credit card activated successfully")
+	api.OK(w, fmt.Sprintf("Credit card %v activated successfully", req.CardNo))
 }

@@ -2,12 +2,14 @@ package tests
 
 import (
 	"bytes"
+	"crypto/ecdsa"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
 	mrand "math/rand/v2"
-	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -20,9 +22,29 @@ import (
 )
 
 func requireLogin(email, password, serverUrl string) {
+	// Get user's password and generate longer password using KDF
+	argon2Key, err := encrypt.DeriveKey(password, nil)
+	if err != nil {
+		log.Fatalf("Error generating KDF password; %v\n", err)
+	}
+
+	// Fetch or generate user's private key for signing
+	path := filepath.Join("keys", fmt.Sprintf("%v.key", email))
+	privKey, err := getPrivateKey(path, argon2Key.Key)
+	if err != nil {
+		log.Fatalf("Error fetching user's private key; %v\n", err)
+	}
+
+	// Sign user's email
+	digest := sha256.Sum256([]byte(email))
+	signature, err := ecdsa.SignASN1(rand.Reader, privKey, digest[:])
+	if err != nil {
+		log.Fatalf("Error signing user's email; %v\n", err)
+	}
+
 	req := handlers.LoginRequest{
-		Email:    email,
-		Password: password,
+		Email:     email,
+		Signature: base64.StdEncoding.EncodeToString(signature),
 	}
 	body, err := json.Marshal(&req)
 	if err != nil {
@@ -49,7 +71,7 @@ func requireLogin(email, password, serverUrl string) {
 	http.DefaultClient.Jar.SetCookies(url, resp.Cookies())
 }
 
-func TestNewCreditCardHandler(t *testing.T) {
+func TestNewCreditCard(t *testing.T) {
 	testServer := httptest.NewServer(r)
 	defer testServer.Close()
 
@@ -57,45 +79,17 @@ func TestNewCreditCardHandler(t *testing.T) {
 	password := testPassword
 	requireLogin(email, password, testServer.URL)
 
-	// Creating a new credit card requires sending an ecdsa.PublicKey
-	// to the server
-	privKey, pubKey, err := encrypt.GenerateKeyPair(rand.Reader)
-	if err != nil {
-		t.Fatalf("Unexpected error generating key pair; %v", err)
-	}
-
-	// Upload public key to multipart form
-	var buff bytes.Buffer
-	multiPartWriter := multipart.NewWriter(&buff)
-
-	writer, err := multiPartWriter.CreateFormFile(handlers.PUB_KEY_FIELD, ".pub")
-	if err != nil {
-		t.Fatalf("Error creating multipart form file; %v\n", err)
-	}
-
-	pubKeyBytes, err := encrypt.PemEncodePublicKey(pubKey)
-	if err != nil {
-		t.Fatalf("Error PEM encoding public key; %v\n", err)
-	}
-
-	_, err = writer.Write(pubKeyBytes)
-	if err != nil {
-		t.Fatalf("Error writing public key data to multipart form file; %v\n", err)
-	}
-	multiPartWriter.Close()
-
 	// Send public key to server
 	resp, err := http.Post(
-		testServer.URL+"/credit-cards",
-		multiPartWriter.FormDataContentType(),
-		&buff,
+		testServer.URL+"/credit-cards", jsonContentType, nil,
 	)
 	if err != nil {
 		t.Fatalf("Error making request; %v\n", err)
 	}
 	defer resp.Body.Close()
 
-	body := expectStatus(t, resp, http.StatusOK)
+	body := printResponse(resp)
+	expectStatus(t, resp.StatusCode, http.StatusOK)
 
 	// Check if request body contains created credit card
 	var creditCard database.CreditCard
@@ -103,26 +97,9 @@ func TestNewCreditCardHandler(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Expected response body to be CreditCard but got garbage data")
 	}
-
-	// We save key pair to a file as we will need it in future requests
-	privKeyFilename := fmt.Sprintf("%v.key", creditCard.CardNo)
-	pubKeyFilename := fmt.Sprintf("%v.pub", creditCard.CardNo)
-
-	privKeyPath := filepath.Join("keys", privKeyFilename)
-	pubKeyPath := filepath.Join("keys", pubKeyFilename)
-
-	err = encrypt.SavePrivateKeyToFile(privKey, privKeyPath, false)
-	if err != nil {
-		t.Fatalf("Unexpected error saving EC private key to file; %v\n", err)
-	}
-
-	err = encrypt.SavePublicKeyToFile(pubKey, pubKeyPath, false)
-	if err != nil {
-		t.Errorf("Unexpected error saving EC public key to file; %v\n", err)
-	}
 }
 
-func TestGetCreditCardsHandler(t *testing.T) {
+func TestGetCreditCards(t *testing.T) {
 	testServer := httptest.NewServer(r)
 	defer testServer.Close()
 
@@ -135,7 +112,8 @@ func TestGetCreditCardsHandler(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	body := expectStatus(t, resp, http.StatusOK)
+	body := printResponse(resp)
+	expectStatus(t, resp.StatusCode, http.StatusOK)
 
 	var results []*database.CreditCard
 	err = json.Unmarshal(body, &results)
@@ -153,7 +131,7 @@ func randomChoice[T any](items []T) *T {
 	return &item
 }
 
-func getCreditCards(serverUrl string) ([]database.CreditCard, error) {
+func getAllCreditCards(serverUrl string) ([]database.CreditCard, error) {
 	log.Println("Fetching user's credit cards...")
 
 	url := serverUrl + "/credit-cards"
@@ -169,16 +147,20 @@ func getCreditCards(serverUrl string) ([]database.CreditCard, error) {
 	return creditCards, err
 }
 
-func TestFreezeCreditCardHandler(t *testing.T) {
+func TestFreezeCreditCard(t *testing.T) {
 	testServer := httptest.NewServer(r)
 	defer testServer.Close()
 
 	requireLogin(testEmail, testPassword, testServer.URL)
 
 	// Get logged in user's credit cards
-	creditCards, err := getCreditCards(testServer.URL)
+	creditCards, err := getAllCreditCards(testServer.URL)
 	if err != nil {
 		t.Fatalf("Error fetching user's credit cards; %v\n", err)
+	}
+
+	if len(creditCards) < 2 {
+		t.Fatalf("Minimum of 2 credit cards required for this test")
 	}
 
 	// Freeze one of them
@@ -203,8 +185,105 @@ func TestFreezeCreditCardHandler(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error making request; %v\n", err)
 	}
+
+	expectStatus(t, resp.StatusCode, http.StatusOK)
+	printResponse(resp)
+	resp.Body.Close()
+
+	// Attempt to make transaction on frozen credit card
+	frozenCreditCard := creditCard
+	var otherCreditCard *database.CreditCard
+
+	for _, cc := range creditCards {
+		if cc.CardNo != frozenCreditCard.CardNo {
+			otherCreditCard = &cc
+			break
+		}
+	}
+
+	if otherCreditCard == nil {
+		t.Fatalf("Minimum of 2 credit cards required for this test")
+	}
+
+	amount := handlers.MIN_AMOUNT
+	resp, err = sendFunds(
+		testServer.URL,
+		frozenCreditCard.CardNo, otherCreditCard.CardNo,
+		testEmail, amount,
+	)
+	if err != nil {
+		t.Fatalf("Error making request; %v\n", err)
+	}
+
+	printResponse(resp)
+	expectStatus(t, resp.StatusCode, http.StatusInternalServerError)
+}
+
+func TestActivateCreditCard(t *testing.T) {
+	testServer := httptest.NewServer(r)
+	defer testServer.Close()
+
+	requireLogin(testEmail, testPassword, testServer.URL)
+
+	creditCards, _ := getAllCreditCards(testServer.URL)
+	var frozenCreditCard *database.CreditCard
+
+	for _, cc := range creditCards {
+		if !cc.IsActive {
+			frozenCreditCard = &cc
+			break
+		}
+	}
+	if frozenCreditCard == nil {
+		t.Fatalf("This test requires a frozen credit card")
+	}
+
+	req := handlers.CreditCardRequest{
+		CardNo: frozenCreditCard.CardNo,
+	}
+	body, err := json.Marshal(&req)
+	if err != nil {
+		t.Fatalf("Error marshalling request; %v\n", err)
+	}
+
+	resp, err := http.Post(
+		testServer.URL+"/credit-cards/activate",
+		jsonContentType,
+		bytes.NewBuffer(body),
+	)
+	if err != nil {
+		t.Fatalf("Error making request; %v\n", err)
+	}
 	defer resp.Body.Close()
 
-	// TODO: Attempt to make transaction on frozen credit card
+	printResponse(resp)
+	expectStatus(t, resp.StatusCode, http.StatusOK)
 
+	// Attempt to make transaction on activated credit card
+	activatedCreditCard := frozenCreditCard
+	var otherCreditCard *database.CreditCard
+
+	for _, cc := range creditCards {
+		if cc.CardNo != activatedCreditCard.CardNo {
+			otherCreditCard = &cc
+			break
+		}
+	}
+
+	if otherCreditCard == nil {
+		t.Fatalf("Minimum of 2 credit cards required for this test")
+	}
+
+	amount := handlers.MIN_AMOUNT
+	resp, err = sendFunds(
+		testServer.URL,
+		activatedCreditCard.CardNo, otherCreditCard.CardNo,
+		testEmail, amount,
+	)
+	if err != nil {
+		t.Fatalf("Error making request; %v\n", err)
+	}
+
+	printResponse(resp)
+	expectStatus(t, resp.StatusCode, http.StatusOK)
 }

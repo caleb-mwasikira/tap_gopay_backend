@@ -1,10 +1,7 @@
 package handlers
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -102,22 +99,6 @@ func validToken(tokenString string, obj any) bool {
 	}
 
 	return false
-}
-
-// func hashUserPassword(password string) string {
-// 	hash := hmac.New(sha256.New, []byte(SECRET_KEY))
-// 	digest := hash.Sum([]byte(password))
-// 	return fmt.Sprintf("%x", digest)
-// }
-
-func verifyPassword(dbPassword, password string) bool {
-	hash := hmac.New(sha256.New, []byte(SECRET_KEY))
-	mac2 := hash.Sum([]byte(password))
-	hmacPassword, err := hex.DecodeString(dbPassword)
-	if err != nil {
-		return false
-	}
-	return hmac.Equal([]byte(hmacPassword), mac2)
 }
 
 func sendPasswordResetEmail(email, token string) {

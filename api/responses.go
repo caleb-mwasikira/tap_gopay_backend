@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+
+	"github.com/go-sql-driver/mysql"
 )
 
 // Returns 401 Unauthorized response to the user
@@ -51,8 +53,14 @@ func Errorf(w http.ResponseWriter, message string, err error) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusInternalServerError)
 
-	status := http.StatusText(http.StatusInternalServerError)
-	log.Printf("%v %v; %v\n", status, message, err)
+	log.Printf("%v %v; %v\n", http.StatusInternalServerError, message, err)
+
+	// MySQL error code 1644 ER_SIGNAL_EXCEPTION - Unhandled user-defined exception condition
+	if mysqlErr, ok := err.(*mysql.MySQLError); ok {
+		if mysqlErr.Number == 1644 {
+			message += fmt.Sprintf(". %v", mysqlErr.Message)
+		}
+	}
 
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": message,

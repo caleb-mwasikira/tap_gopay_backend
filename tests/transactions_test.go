@@ -4,12 +4,10 @@ import (
 	"bytes"
 	"crypto/ecdsa"
 	"crypto/rand"
-	"encoding/hex"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
-	"math"
-	mrand "math/rand/v2"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -17,10 +15,48 @@ import (
 	"time"
 
 	"github.com/caleb-mwasikira/tap_gopay_backend/encrypt"
-	h "github.com/caleb-mwasikira/tap_gopay_backend/handlers"
+	"github.com/caleb-mwasikira/tap_gopay_backend/handlers"
 )
 
-func TestSendFundsHandler(t *testing.T) {
+func sendFunds(
+	testServerUrl string,
+	sender, receiver, sendersEmail string,
+	amount float64,
+) (*http.Response, error) {
+	req := handlers.SendFundsRequest{
+		Sender:    sender,
+		Receiver:  receiver,
+		Amount:    amount,
+		CreatedAt: time.Now().UTC().Format(time.RFC3339Nano),
+	}
+
+	log.Printf("Sending funds from %v to %v\n", sender, receiver)
+
+	// Load user's private key from file
+	privKeyPath := filepath.Join("keys", fmt.Sprintf("%v.key", sendersEmail))
+	privKey, err := encrypt.LoadPrivateKeyFromFile(privKeyPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Sign send funds request
+	digest := req.Hash()
+	signature, err := ecdsa.SignASN1(rand.Reader, privKey, digest)
+	if err != nil {
+		return nil, err
+	}
+	req.Signature = base64.StdEncoding.EncodeToString(signature)
+
+	// Send sends fund request to server
+	body, err := json.Marshal(&req)
+	if err != nil {
+		return nil, err
+	}
+
+	return http.Post(testServerUrl+"/send-funds", jsonContentType, bytes.NewBuffer(body))
+}
+
+func TestSendFunds(t *testing.T) {
 	testServer := httptest.NewServer(r)
 	defer testServer.Close()
 
@@ -29,7 +65,7 @@ func TestSendFundsHandler(t *testing.T) {
 	requireLogin(email, password, testServer.URL)
 
 	// Get logged in user's credit cards
-	creditCards, err := getCreditCards(testServer.URL)
+	creditCards, err := getAllCreditCards(testServer.URL)
 	if err != nil {
 		t.Fatalf("Error fetching user's credit cards; %v\n", err)
 	}
@@ -41,47 +77,14 @@ func TestSendFundsHandler(t *testing.T) {
 
 	sender := creditCards[0].CardNo
 	receiver := creditCards[1].CardNo
-	amount := math.Round(mrand.Float64() * 100)
+	amount := handlers.MIN_AMOUNT
 
-	req := h.SendFundsRequest{
-		Sender:    sender,
-		Receiver:  receiver,
-		Amount:    amount,
-		CreatedAt: time.Now().UTC().Format(time.RFC3339Nano),
-	}
-
-	log.Printf("Sending funds from %v to %v\n", sender, receiver)
-
-	// Load senders private key from file
-	filename := fmt.Sprintf("%v.key", sender)
-	privKeyPath := filepath.Join("keys", filename)
-	privKey, err := encrypt.LoadPrivateKeyFromFile(privKeyPath)
-	if err != nil {
-		t.Fatalf("Error loading private key from file; %v\n", err)
-	}
-
-	// Sign send funds request
-	digest := req.Hash()
-	hexDigest := hex.EncodeToString(digest)
-	log.Println("Hash client side: ", hexDigest)
-
-	signature, err := ecdsa.SignASN1(rand.Reader, privKey, digest)
-	if err != nil {
-		t.Fatalf("Error signing send funds request; %v\n", err)
-	}
-	req.Signature = hex.EncodeToString(signature)
-
-	// Send sends fund request to server
-	body, err := json.Marshal(&req)
-	if err != nil {
-		t.Fatalf("Error marshalling send funds request; %v\n", err)
-	}
-
-	resp, err := http.Post(testServer.URL+"/send-funds", jsonContentType, bytes.NewBuffer(body))
+	resp, err := sendFunds(testServer.URL, sender, receiver, email, amount)
 	if err != nil {
 		t.Fatalf("Error making request; %v\n", err)
 	}
 	defer resp.Body.Close()
 
-	expectStatus(t, resp, http.StatusOK)
+	printResponse(resp)
+	expectStatus(t, resp.StatusCode, http.StatusOK)
 }

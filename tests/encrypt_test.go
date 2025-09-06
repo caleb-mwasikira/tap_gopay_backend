@@ -1,57 +1,55 @@
 package tests
 
 import (
+	"bytes"
+	"crypto/ecdsa"
 	"crypto/sha256"
-	"io"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/caleb-mwasikira/tap_gopay_backend/encrypt"
 )
 
-func readOrCreateSeedPhrase(path string) ([]byte, error) {
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0700)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	data, err := io.ReadAll(file)
-	if err != nil {
-		return nil, err
+// Reads private key from file.
+// If reading private key fails and a seed phrase is provided,
+// the func generates a new private key using provided seed phrase,
+// saving it (private key) to the same file.
+func getPrivateKey(path string, seedPhrase []byte) (*ecdsa.PrivateKey, error) {
+	privateKey, err := encrypt.LoadPrivateKeyFromFile(path)
+	if err == nil {
+		return privateKey, nil
 	}
 
-	if len(data) > 0 {
-		return data, nil
-	}
-
-	// There was no seed phrase stored in file
-	_, err = file.Seek(0, 0)
-	if err != nil {
+	if len(seedPhrase) == 0 {
+		// No seed phrase material to generate a new private key
 		return nil, err
 	}
 
-	seed := encrypt.GenerateSeedPhrase()
-	_, err = file.WriteString(seed)
+	reader := bytes.NewBuffer(seedPhrase)
+	privKey, _, err := encrypt.GenerateKeyPair(reader)
 	if err != nil {
 		return nil, err
 	}
-	return []byte(seed), nil
+
+	data, err := encrypt.PemEncodePrivateKey(privKey)
+	if err != nil {
+		return nil, err
+	}
+
+	err = os.WriteFile(path, data, 0700)
+	return privKey, err
 }
 
-// Test that generating keys with same seed phrase creates the
-// same keys
+// Test deterministic key generation using password + KDF
 func TestGenerateKeys(t *testing.T) {
-	seedPhraseFile := filepath.Join("keys", "seed_phrase")
-	seedPhrase, err := readOrCreateSeedPhrase(seedPhraseFile)
+	argon2Key, err := encrypt.DeriveKey(testPassword, nil)
 	if err != nil {
-		t.Fatalf("Error reading or creating seed phrase; %v\n", err)
+		t.Fatalf("Error generating KDF based password; %v\n", err)
 	}
 
 	// Generate 1st key pair and hash private key
-	seedPhraseReader := encrypt.NewSeedPhraseReader(seedPhrase)
-	privKey, _, err := encrypt.GenerateKeyPair(seedPhraseReader)
+	reader := bytes.NewBuffer(argon2Key.Key)
+	privKey, _, err := encrypt.GenerateKeyPair(reader)
 	if err != nil {
 		t.Fatalf("Unexpected error generating key pair; %v", err)
 	}
@@ -63,8 +61,8 @@ func TestGenerateKeys(t *testing.T) {
 	hash1 := sha256.Sum256(privKeyBytes)
 
 	// Generate 2nd key pair and hash private key
-	seedPhraseReader = encrypt.NewSeedPhraseReader(seedPhrase)
-	privKey, _, err = encrypt.GenerateKeyPair(seedPhraseReader)
+	reader = bytes.NewBuffer(argon2Key.Key)
+	privKey, _, err = encrypt.GenerateKeyPair(reader)
 	if err != nil {
 		t.Fatalf("Unexpected error generating key pair; %v", err)
 	}

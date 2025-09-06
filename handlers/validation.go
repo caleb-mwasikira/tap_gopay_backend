@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"encoding/hex"
+	"encoding/base64"
 	"fmt"
 	"net/mail"
 	"reflect"
@@ -13,10 +13,10 @@ import (
 )
 
 const (
-	MIN_NAME_LEN            = 4
-	MIN_PASSWORD_LEN        = 8
-	MIN_AMOUNT              = 1
-	CURRENCY_CODE    string = "KES"
+	MIN_NAME_LEN             = 4
+	MIN_PASSWORD_LEN         = 8
+	MIN_AMOUNT       float64 = 1.0
+	CURRENCY_CODE    string  = "KES"
 )
 
 func validateStruct(obj any) []string {
@@ -66,12 +66,6 @@ func validateStruct(obj any) []string {
 					errs = append(errs, err.Error())
 				}
 			}
-			if rule == "password" {
-				str, _ := fieldValue.(string)
-				if err := validatePassword(str); err != nil {
-					errs = append(errs, err.Error())
-				}
-			}
 			if rule == "phone_no" {
 				str, _ := fieldValue.(string)
 				if err := validatePhone(str); err != nil {
@@ -92,7 +86,13 @@ func validateStruct(obj any) []string {
 			}
 			if rule == "signature" {
 				str, _ := fieldValue.(string)
-				if _, err := validateSignature(str); err != nil {
+				if !isBase64Encoded(str) {
+					errs = append(errs, "Server expects a base64-encoded signature")
+				}
+			}
+			if rule == "public_key" {
+				data, _ := fieldValue.([]byte)
+				if err := validatePublicKey(data); err != nil {
 					errs = append(errs, err.Error())
 				}
 			}
@@ -127,37 +127,11 @@ func isEmpty(value string) bool {
 	return strings.TrimSpace(value) == ""
 }
 
-func validateName(field, value string) error {
-	if isEmpty(value) {
-		return fmt.Errorf("%v value cannot be empty", field)
-	}
-
-	value = strings.TrimSpace(value)
-	if len(value) < MIN_NAME_LEN {
-		return fmt.Errorf("%v too short", field)
-	}
-	return nil
-}
-
 func validateEmail(email string) error {
 	_, err := mail.ParseAddress(email)
 	if err != nil {
 		return fmt.Errorf("invalid email address")
 	}
-	return nil
-}
-
-func validatePassword(password string) error {
-	if isEmpty(password) {
-		return fmt.Errorf("password value cannot be empty")
-	}
-
-	password = strings.TrimSpace(password)
-	if len(password) < MIN_PASSWORD_LEN {
-		return fmt.Errorf("password too short")
-	}
-
-	// TODO: check password strength
 	return nil
 }
 
@@ -174,7 +148,7 @@ func validatePhone(phone string) error {
 	return nil
 }
 
-// Right now this only supported ecdsa public keys
+// Right now this only supports ecdsa public keys
 func validatePublicKey(pubKeyBytes []byte) error {
 	_, err := encrypt.LoadPublicKeyFromBytes(pubKeyBytes)
 	return err
@@ -187,13 +161,9 @@ func validateAmount(amount float64) error {
 	return nil
 }
 
-// Hex-decodes a signature value
-func validateSignature(signature string) ([]byte, error) {
-	sig, err := hex.DecodeString(signature)
-	if err != nil {
-		return nil, fmt.Errorf("server expects hex-encoded signatures")
-	}
-	return sig, nil
+func isBase64Encoded(value string) bool {
+	_, err := base64.StdEncoding.DecodeString(value)
+	return err == nil
 }
 
 func validateCreditCardNo(cardNo string) error {
