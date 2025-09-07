@@ -64,8 +64,8 @@ func Register(w http.ResponseWriter, r *http.Request) {
 		PhoneNo:   r.FormValue("phone_no"),
 		PublicKey: pubKeyBytes,
 	}
-	if errs := validateStruct(req); len(errs) > 0 {
-		api.BadRequest2(w, errs)
+	if err := validateStruct(req); err != nil {
+		api.BadRequest(w, err.Error())
 		return
 	}
 
@@ -102,8 +102,8 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if errs := validateStruct(req); len(errs) > 0 {
-		api.BadRequest2(w, errs)
+	if err := validateStruct(req); err != nil {
+		api.BadRequest(w, err.Error())
 		return
 	}
 
@@ -165,8 +165,8 @@ func ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if errs := validateStruct(req); len(errs) > 0 {
-		api.BadRequest2(w, errs)
+	if err := validateStruct(req); err != nil {
+		api.BadRequest(w, err.Error())
 		return
 	}
 
@@ -218,8 +218,8 @@ func ResetPassword(w http.ResponseWriter, r *http.Request) {
 		Token:     r.FormValue("token"),
 		PublicKey: pubKeyBytes,
 	}
-	if errs := validateStruct(req); len(errs) > 0 {
-		api.BadRequest2(w, errs)
+	if err := validateStruct(req); err != nil {
+		api.BadRequest(w, err.Error())
 		return
 	}
 

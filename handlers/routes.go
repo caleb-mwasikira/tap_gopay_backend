@@ -22,12 +22,12 @@ func GetRoutes() *chi.Mux {
 			r.Use(RequireAuthMiddleware)
 
 			// Protected routes
+			r.Post("/new-credit-card", NewCreditCard)
 			r.Get("/credit-cards", GetAllCreditCards)
 			r.Get("/credit-cards/{card_no}", GetCreditCard)
-			r.Post("/credit-cards", NewCreditCard)
-			r.Post("/credit-cards/freeze", FreezeCreditCard)
-			r.Post("/credit-cards/activate", ActivateCreditCard)
-			r.Post("/send-funds", SendFunds)
+			r.Post("/credit-cards/{card_no}/freeze", FreezeCreditCard)
+			r.Post("/credit-cards/{card_no}/activate", ActivateCreditCard)
+			r.Post("/transfer-funds", TransferFunds)
 			r.Post("/request-funds", RequestFunds)
 
 			r.Get("/verify-login", VerifyLogin)

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"math/rand/v2"
 	"net/http"
@@ -13,20 +12,30 @@ import (
 )
 
 const (
-	CREDIT_CARD_MIN_LEN         int     = 12
+	CREDIT_CARD_MIN_LEN         int     = 16
 	CREDIT_CARD_INITIAL_DEPOSIT float64 = 100
 )
 
+// Credit card number will be in the format
+//
+//	1234 5678 8765 5432
 func generateCreditCardNo() string {
 	// TODO: Implement credit card_no generation using the Luhn algorithm
 
 	str := strings.Builder{}
+	index := 0
 
 	for range CREDIT_CARD_MIN_LEN {
+		if index != 0 && (index%4) == 0 {
+			str.WriteString(" ")
+		}
+
 		num := rand.IntN(10)
 		str.WriteString(fmt.Sprintf("%d", num))
+		index++
 	}
-	return str.String()
+	cardNo := str.String()
+	return strings.TrimSpace(cardNo)
 }
 
 func NewCreditCard(w http.ResponseWriter, r *http.Request) {
@@ -73,7 +82,7 @@ func GetCreditCard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cardNo := chi.URLParam(r, "card_no")
-	if err := validateCreditCardNo(cardNo); err != nil {
+	if err := validateCardNumber(cardNo); err != nil {
 		api.BadRequest(w, err.Error())
 		return
 	}
@@ -87,10 +96,6 @@ func GetCreditCard(w http.ResponseWriter, r *http.Request) {
 	api.OK2(w, creditCard)
 }
 
-type CreditCardRequest struct {
-	CardNo string `json:"card_no" validate:"card_no"`
-}
-
 func FreezeCreditCard(w http.ResponseWriter, r *http.Request) {
 	user, ok := getAuthUser(r)
 	if !ok {
@@ -98,25 +103,19 @@ func FreezeCreditCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req CreditCardRequest
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
-		api.BadRequest(w, "card_no field required")
+	cardNo := chi.URLParam(r, "card_no")
+	if err := validateCardNumber(cardNo); err != nil {
+		api.BadRequest(w, err.Error())
 		return
 	}
 
-	if errs := validateStruct(req); len(errs) > 0 {
-		api.BadRequest2(w, errs)
-		return
-	}
-
-	err = database.FreezeCreditCard(user.Id, req.CardNo)
+	err := database.FreezeCreditCard(user.Id, cardNo)
 	if err != nil {
 		api.Errorf(w, "Error freezing credit card account", err)
 		return
 	}
 
-	api.OK(w, fmt.Sprintf("Credit card %v deactivated successfully", req.CardNo))
+	api.OK(w, fmt.Sprintf("Credit card %v deactivated successfully", cardNo))
 }
 
 func ActivateCreditCard(w http.ResponseWriter, r *http.Request) {
@@ -126,23 +125,17 @@ func ActivateCreditCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req CreditCardRequest
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
-		api.BadRequest(w, "card_no field required")
+	cardNo := chi.URLParam(r, "card_no")
+	if err := validateCardNumber(cardNo); err != nil {
+		api.BadRequest(w, err.Error())
 		return
 	}
 
-	if errs := validateStruct(req); len(errs) > 0 {
-		api.BadRequest2(w, errs)
-		return
-	}
-
-	err = database.ActivateCreditCard(user.Id, req.CardNo)
+	err := database.ActivateCreditCard(user.Id, cardNo)
 	if err != nil {
 		api.Errorf(w, "Error activating credit card account", err)
 		return
 	}
 
-	api.OK(w, fmt.Sprintf("Credit card %v activated successfully", req.CardNo))
+	api.OK(w, fmt.Sprintf("Credit card %v activated successfully", cardNo))
 }

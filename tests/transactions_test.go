@@ -18,16 +18,16 @@ import (
 	"github.com/caleb-mwasikira/tap_gopay_backend/handlers"
 )
 
-func sendFunds(
+func transferFunds(
 	testServerUrl string,
 	sender, receiver, sendersEmail string,
 	amount float64,
 ) (*http.Response, error) {
-	req := handlers.SendFundsRequest{
+	req := handlers.TransactionRequest{
 		Sender:    sender,
 		Receiver:  receiver,
 		Amount:    amount,
-		CreatedAt: time.Now().UTC().Format(time.RFC3339Nano),
+		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	}
 
 	log.Printf("Sending funds from %v to %v\n", sender, receiver)
@@ -53,10 +53,10 @@ func sendFunds(
 		return nil, err
 	}
 
-	return http.Post(testServerUrl+"/send-funds", jsonContentType, bytes.NewBuffer(body))
+	return http.Post(testServerUrl+"/transfer-funds", jsonContentType, bytes.NewBuffer(body))
 }
 
-func TestSendFunds(t *testing.T) {
+func TesTransferFunds(t *testing.T) {
 	testServer := httptest.NewServer(r)
 	defer testServer.Close()
 
@@ -79,7 +79,7 @@ func TestSendFunds(t *testing.T) {
 	receiver := creditCards[1].CardNo
 	amount := handlers.MIN_AMOUNT
 
-	resp, err := sendFunds(testServer.URL, sender, receiver, email, amount)
+	resp, err := transferFunds(testServer.URL, sender, receiver, email, amount)
 	if err != nil {
 		t.Fatalf("Error making request; %v\n", err)
 	}

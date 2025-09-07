@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"github.com/caleb-mwasikira/tap_gopay_backend/api"
@@ -13,23 +12,24 @@ import (
 	"github.com/caleb-mwasikira/tap_gopay_backend/encrypt"
 )
 
-type SendFundsRequest struct {
+type TransactionRequest struct {
 	Sender    string  `json:"sender" validate:"card_no"`
 	Receiver  string  `json:"receiver" validate:"card_no"`
 	Amount    float64 `json:"amount" validate:"amount"`
-	CreatedAt string  `json:"created_at"` // ISO 8601 string
+	CreatedAt string  `json:"created_at"` // RFC3339 formatted string
 
 	// Base64 encoded signature
 	// Request signed by sender
 	Signature string `json:"signature" validate:"signature"`
 }
 
-func (req SendFundsRequest) Hash() []byte {
+func (req TransactionRequest) Hash() []byte {
 	data, _ := json.Marshal(struct {
 		Sender    string  `json:"sender"`
 		Receiver  string  `json:"receiver"`
 		Amount    float64 `json:"amount"`
 		CreatedAt string  `json:"created_at"`
+		// We purposefully omit the signature
 	}{
 		Sender:    req.Sender,
 		Receiver:  req.Receiver,
@@ -41,22 +41,22 @@ func (req SendFundsRequest) Hash() []byte {
 	return h[:]
 }
 
-func SendFunds(w http.ResponseWriter, r *http.Request) {
+func TransferFunds(w http.ResponseWriter, r *http.Request) {
 	user, ok := getAuthUser(r)
 	if !ok {
 		api.Unauthorized(w)
 		return
 	}
 
-	var req SendFundsRequest
+	var req TransactionRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		api.BadRequest(w, "sender, receiver, amount, created_at and signature fields required")
 		return
 	}
 
-	if errs := validateStruct(req); len(errs) > 0 {
-		api.BadRequest2(w, errs)
+	if err := validateStruct(req); err != nil {
+		api.BadRequest(w, err.Error())
 		return
 	}
 
@@ -80,7 +80,7 @@ func SendFunds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = database.CreateTransaction(
+	transaction, err := database.CreateTransaction(
 		req.Sender, req.Receiver, req.Amount,
 		req.CreatedAt, req.Signature,
 	)
@@ -89,10 +89,7 @@ func SendFunds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	message := fmt.Sprintf("Confirmed. Account %v sent %v %v to %v",
-		req.Sender, CURRENCY_CODE, req.Amount, req.Receiver,
-	)
-	api.OK(w, message)
+	api.OK2(w, transaction)
 }
 
 // A user can request funds from another user
@@ -103,15 +100,15 @@ func RequestFunds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req SendFundsRequest
+	var req TransactionRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		api.BadRequest(w, "sender, receiver, amount and signature fields required")
 		return
 	}
 
-	if errs := validateStruct(req); len(errs) > 0 {
-		api.BadRequest2(w, errs)
+	if err := validateStruct(req); err != nil {
+		api.BadRequest(w, err.Error())
 		return
 	}
 
@@ -137,7 +134,7 @@ func RequestFunds(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Add record to database
-	err = database.CreateRequestFunds(
+	transaction, err := database.CreateRequestFunds(
 		req.Sender, req.Receiver, req.Amount,
 		req.CreatedAt, req.Signature,
 	)
@@ -146,8 +143,5 @@ func RequestFunds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	message := fmt.Sprintf("Confirmed. Account %v requested %v %v from %v",
-		req.Receiver, CURRENCY_CODE, req.Amount, req.Sender,
-	)
-	api.OK(w, message)
+	api.OK2(w, transaction)
 }

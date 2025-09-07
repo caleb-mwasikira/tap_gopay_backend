@@ -81,7 +81,7 @@ func TestNewCreditCard(t *testing.T) {
 
 	// Send public key to server
 	resp, err := http.Post(
-		testServer.URL+"/credit-cards", jsonContentType, nil,
+		testServer.URL+"/new-credit-card", jsonContentType, nil,
 	)
 	if err != nil {
 		t.Fatalf("Error making request; %v\n", err)
@@ -99,7 +99,7 @@ func TestNewCreditCard(t *testing.T) {
 	}
 }
 
-func TestGetCreditCards(t *testing.T) {
+func TestGetAllCreditCards(t *testing.T) {
 	testServer := httptest.NewServer(r)
 	defer testServer.Close()
 
@@ -147,6 +147,45 @@ func getAllCreditCards(serverUrl string) ([]database.CreditCard, error) {
 	return creditCards, err
 }
 
+func TestGetCreditCard(t *testing.T) {
+	testServer := httptest.NewServer(r)
+	defer testServer.Close()
+
+	requireLogin(testEmail, testPassword, testServer.URL)
+
+	creditCards, err := getAllCreditCards(testServer.URL)
+	if err != nil {
+		t.Fatalf("Error fetching user's credit cards; %v\n", err)
+	}
+	// We are going to fetch this one credit card from server
+	creditCard := randomChoice(creditCards)
+	if creditCard == nil {
+		t.Logf("Logged in user has no credit card in their name")
+		return
+	}
+
+	resp, err := http.Get(
+		testServer.URL + fmt.Sprintf("/credit-cards/%v", creditCard.CardNo),
+	)
+	if err != nil {
+		t.Fatalf("Error making request; %v\n", err)
+	}
+
+	body := printResponse(resp)
+	expectStatus(t, resp.StatusCode, http.StatusOK)
+
+	// Check if request body contains fetched credit card
+	var fetchedCreditCard database.CreditCard
+	err = json.Unmarshal(body, &fetchedCreditCard)
+	if err != nil {
+		t.Fatalf("Expected response body to be CreditCard but got garbage data")
+	}
+
+	if fetchedCreditCard.CardNo != creditCard.CardNo {
+		t.Fatalf("Expected to fetch credit card with cardNo %v but got %v\n", fetchedCreditCard.CardNo, creditCard.CardNo)
+	}
+}
+
 func TestFreezeCreditCard(t *testing.T) {
 	testServer := httptest.NewServer(r)
 	defer testServer.Close()
@@ -172,16 +211,8 @@ func TestFreezeCreditCard(t *testing.T) {
 
 	log.Printf("Freezing credit card %v\n", creditCard.CardNo)
 
-	req := handlers.CreditCardRequest{
-		CardNo: creditCard.CardNo,
-	}
-	body, err := json.Marshal(&req)
-	if err != nil {
-		t.Fatalf("Error marshalling request; %v\n", err)
-	}
-
-	url := testServer.URL + "/credit-cards/freeze"
-	resp, err := http.Post(url, jsonContentType, bytes.NewBuffer(body))
+	url := testServer.URL + fmt.Sprintf("/credit-cards/%v/freeze", creditCard.CardNo)
+	resp, err := http.Post(url, jsonContentType, nil)
 	if err != nil {
 		t.Fatalf("Error making request; %v\n", err)
 	}
@@ -206,7 +237,7 @@ func TestFreezeCreditCard(t *testing.T) {
 	}
 
 	amount := handlers.MIN_AMOUNT
-	resp, err = sendFunds(
+	resp, err = transferFunds(
 		testServer.URL,
 		frozenCreditCard.CardNo, otherCreditCard.CardNo,
 		testEmail, amount,
@@ -238,18 +269,10 @@ func TestActivateCreditCard(t *testing.T) {
 		t.Fatalf("This test requires a frozen credit card")
 	}
 
-	req := handlers.CreditCardRequest{
-		CardNo: frozenCreditCard.CardNo,
-	}
-	body, err := json.Marshal(&req)
-	if err != nil {
-		t.Fatalf("Error marshalling request; %v\n", err)
-	}
-
 	resp, err := http.Post(
-		testServer.URL+"/credit-cards/activate",
+		testServer.URL+fmt.Sprintf("/credit-cards/%v/activate", frozenCreditCard.CardNo),
 		jsonContentType,
-		bytes.NewBuffer(body),
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("Error making request; %v\n", err)
@@ -275,7 +298,7 @@ func TestActivateCreditCard(t *testing.T) {
 	}
 
 	amount := handlers.MIN_AMOUNT
-	resp, err = sendFunds(
+	resp, err = transferFunds(
 		testServer.URL,
 		activatedCreditCard.CardNo, otherCreditCard.CardNo,
 		testEmail, amount,

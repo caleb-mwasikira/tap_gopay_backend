@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/mail"
 	"reflect"
@@ -19,16 +20,13 @@ const (
 	CURRENCY_CODE    string  = "KES"
 )
 
-func validateStruct(obj any) []string {
-	var errs []string
-
+func validateStruct(obj any) error {
 	objValue := reflect.ValueOf(obj)
 	objTyp := reflect.TypeOf(obj)
 	objKind := reflect.TypeOf(obj).Kind()
 
 	if objKind != reflect.Struct {
-		errs = append(errs, "obj is not a Struct")
-		return errs
+		return errors.New("obj is not a Struct")
 	}
 
 	for i := 0; i < objTyp.NumField(); i++ {
@@ -45,60 +43,60 @@ func validateStruct(obj any) []string {
 			if rule == "required" {
 				isZero := reflect.ValueOf(field).IsZero()
 				if isZero {
-					errs = append(errs, fmt.Sprintf("%s is required", field.Name))
+					return fmt.Errorf("%s is required", field.Name)
 				}
 			}
 			if strings.HasPrefix(rule, "min=") {
 				min, _ := strconv.Atoi(strings.TrimPrefix(rule, "min="))
 				if lessThan(fieldValue, min) {
-					errs = append(errs, fmt.Sprintf("%s must be greater than %d", field.Name, min))
+					return fmt.Errorf("%s must be greater than %d", field.Name, min)
 				}
 			}
 			if strings.HasPrefix(rule, "max=") {
 				max, _ := strconv.Atoi(strings.TrimPrefix(rule, "max="))
 				if greaterThan(fieldValue, max) {
-					errs = append(errs, fmt.Sprintf("%s must be less than %d", field.Name, max))
+					return fmt.Errorf("%s must be less than %d", field.Name, max)
 				}
 			}
 			if rule == "email" {
 				str, _ := fieldValue.(string)
 				if err := validateEmail(str); err != nil {
-					errs = append(errs, err.Error())
+					return err
 				}
 			}
 			if rule == "phone_no" {
 				str, _ := fieldValue.(string)
-				if err := validatePhone(str); err != nil {
-					errs = append(errs, err.Error())
+				if err := validatePhoneNumber(str); err != nil {
+					return err
 				}
 			}
 			if rule == "card_no" {
 				str, _ := fieldValue.(string)
-				if err := validateCreditCardNo(str); err != nil {
-					errs = append(errs, err.Error())
+				if err := validateCardNumber(str); err != nil {
+					return err
 				}
 			}
 			if rule == "amount" {
 				value, _ := fieldValue.(float64)
 				if err := validateAmount(value); err != nil {
-					errs = append(errs, err.Error())
+					return err
 				}
 			}
 			if rule == "signature" {
 				str, _ := fieldValue.(string)
 				if !isBase64Encoded(str) {
-					errs = append(errs, "Server expects a base64-encoded signature")
+					return errors.New("signature must be base64-encoded")
 				}
 			}
 			if rule == "public_key" {
 				data, _ := fieldValue.([]byte)
 				if err := validatePublicKey(data); err != nil {
-					errs = append(errs, err.Error())
+					return err
 				}
 			}
 		}
 	}
-	return errs
+	return nil
 }
 
 func greaterThan(v interface{}, limit int) bool {
@@ -135,7 +133,7 @@ func validateEmail(email string) error {
 	return nil
 }
 
-func validatePhone(phone string) error {
+func validatePhoneNumber(phone string) error {
 	if isEmpty(phone) {
 		return fmt.Errorf("phone number value cannot be empty")
 	}
@@ -166,12 +164,25 @@ func isBase64Encoded(value string) bool {
 	return err == nil
 }
 
-func validateCreditCardNo(cardNo string) error {
+// Credit card number will be in the format
+//
+//	1234 5678 8765 5432
+func validateCardNumber(cardNo string) error {
 	// TODO: Implement credit card_no validation using the Luhn algorithm
 
 	cardNo = strings.TrimSpace(cardNo)
-	if len(cardNo) < CREDIT_CARD_MIN_LEN {
-		return fmt.Errorf("credit card number too short")
+	fields := strings.Split(cardNo, " ")
+	if len(fields) != 4 {
+		return fmt.Errorf("invalid card number format")
+	}
+
+	for _, field := range fields {
+		if _, err := strconv.Atoi(field); err != nil {
+			return fmt.Errorf("card number must contain numbers only")
+		}
+		if len(field) != 4 {
+			return fmt.Errorf("invalid card number format")
+		}
 	}
 	return nil
 }
