@@ -7,10 +7,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/caleb-mwasikira/tap_gopay_backend/api"
 	"github.com/caleb-mwasikira/tap_gopay_backend/database"
 	"github.com/caleb-mwasikira/tap_gopay_backend/encrypt"
+	"github.com/go-chi/chi/v5"
 )
 
 type TransactionRequest struct {
@@ -192,4 +194,38 @@ func RequestFunds(w http.ResponseWriter, r *http.Request) {
 	}
 
 	api.OK2(w, transaction)
+}
+
+func GetTransaction(w http.ResponseWriter, r *http.Request) {
+	transactionId := chi.URLParam(r, "transaction_id")
+	transactionId = strings.TrimSpace(transactionId)
+
+	if len(transactionId) < database.TRANSACTION_ID_LEN {
+		api.BadRequest(w, "Invalid transaction id")
+		return
+	}
+
+	t, err := database.GetTransaction(transactionId)
+	if err != nil {
+		api.Errorf(w, "Error fetching transaction", err)
+		return
+	}
+
+	api.OK2(w, t)
+}
+
+func GetRecentTransactions(w http.ResponseWriter, r *http.Request) {
+	cardNo := chi.URLParam(r, "card_no")
+	if err := validateCardNumber(cardNo); err != nil {
+		api.BadRequest(w, err.Error())
+		return
+	}
+
+	transactions, err := database.GetRecentTransactions(cardNo)
+	if err != nil {
+		api.Errorf(w, "Error fetching credit card transactions", err)
+		return
+	}
+
+	api.OK2(w, transactions)
 }

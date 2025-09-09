@@ -29,6 +29,12 @@ func GetRoutes() *chi.Mux {
 			r.Post("/credit-cards/{card_no}/activate", ActivateCreditCard)
 			r.Post("/transfer-funds", TransferFunds)
 			r.Post("/request-funds", RequestFunds)
+			r.Get("/recent-transactions/{card_no}", GetRecentTransactions)
+			r.Get("/transactions/{transaction_id}", GetTransaction)
+
+			// TODO: Implement require ownership middleware that checks if
+			// the credit card a user is requesting action on belongs to them.
+			// Affected routes */{card_no}/*
 
 			r.Get("/verify-login", VerifyLogin)
 		})

@@ -115,3 +115,56 @@ func TestTransferFunds(t *testing.T) {
 
 	expectStatus(t, resp, http.StatusOK)
 }
+
+func TestGetRecentTransactions(t *testing.T) {
+	testServer := httptest.NewServer(r)
+	defer testServer.Close()
+
+	// Fetch one of tommy's credit cards
+	tommysCreditCard, err := getUsersCreditCard(testServer.URL, tommy, nil)
+	if err != nil {
+		t.Fatalf("Error fetching user's credit card; %v\n", err)
+	}
+
+	// Get all transactions made by that credit card
+	requireLogin(tommy, testServer.URL)
+
+	resp, err := http.Get(testServer.URL + fmt.Sprintf("/recent-transactions/%v", tommysCreditCard.CardNo))
+	if err != nil {
+		t.Fatalf("Error making request; %v\n", err)
+	}
+	defer resp.Body.Close()
+
+	body := expectStatus(t, resp, http.StatusOK)
+
+	// Check if server returns a list of transactions
+	var result []*database.Transaction
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		t.Errorf("Expected list of transactions in response body, but got garbage data")
+	}
+}
+
+func TestGetTransaction(t *testing.T) {
+	testServer := httptest.NewServer(r)
+	defer testServer.Close()
+
+	requireLogin(tommy, testServer.URL)
+
+	// References?? I pulled it straight out of my a**
+	transactionId := "XKLPLGYXCSLV"
+
+	resp, err := http.Get(testServer.URL + fmt.Sprintf("/transactions/%v", transactionId))
+	if err != nil {
+		t.Fatalf("Error making request; %v\n", err)
+	}
+	defer resp.Body.Close()
+
+	body := expectStatus(t, resp, http.StatusOK)
+
+	var transaction database.Transaction
+	err = json.Unmarshal(body, &transaction)
+	if err != nil {
+		t.Errorf("Expected transaction but got garbage data")
+	}
+}
