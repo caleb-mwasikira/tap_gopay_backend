@@ -14,13 +14,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/caleb-mwasikira/tap_gopay_backend/database"
 	"github.com/caleb-mwasikira/tap_gopay_backend/encrypt"
 	"github.com/caleb-mwasikira/tap_gopay_backend/handlers"
 )
 
 func transferFunds(
 	testServerUrl string,
-	sender, receiver, sendersEmail string,
+	sender, receiver, privKeyFilename string,
 	amount float64,
 ) (*http.Response, error) {
 	req := handlers.TransactionRequest{
@@ -30,10 +31,10 @@ func transferFunds(
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	}
 
-	log.Printf("Sending funds from %v to %v\n", sender, receiver)
+	log.Printf("Sending funds from '%v' to '%v'\n", sender, receiver)
 
 	// Load user's private key from file
-	privKeyPath := filepath.Join("keys", fmt.Sprintf("%v.key", sendersEmail))
+	privKeyPath := filepath.Join("keys", privKeyFilename)
 	privKey, err := encrypt.LoadPrivateKeyFromFile(privKeyPath)
 	if err != nil {
 		return nil, err
@@ -56,35 +57,61 @@ func transferFunds(
 	return http.Post(testServerUrl+"/transfer-funds", jsonContentType, bytes.NewBuffer(body))
 }
 
-func TesTransferFunds(t *testing.T) {
+func TestTransferFunds(t *testing.T) {
 	testServer := httptest.NewServer(r)
 	defer testServer.Close()
 
-	email := testEmail
-	password := testPassword
-	requireLogin(email, password, testServer.URL)
-
-	// Get logged in user's credit cards
-	creditCards, err := getAllCreditCards(testServer.URL)
+	tommysCreditCard, err := getUsersCreditCard(
+		testServer.URL,
+		tommy,
+		func(cc database.CreditCard) bool {
+			return cc.IsActive
+		},
+	)
 	if err != nil {
-		t.Fatalf("Error fetching user's credit cards; %v\n", err)
+		t.Fatalf("Error fetching users credit card; %v\n", err)
 	}
 
-	// Send funds from one credit card to another.
-	if len(creditCards) < 2 {
-		t.Fatalf("Minimum of 2 credit cards required for testing")
+	leesCreditCard, err := getUsersCreditCard(
+		testServer.URL,
+		lee,
+		func(cc database.CreditCard) bool {
+			return cc.IsActive
+		},
+	)
+	if err != nil {
+		t.Fatalf("Error fetching users credit card; %v\n", err)
 	}
 
-	sender := creditCards[0].CardNo
-	receiver := creditCards[1].CardNo
-	amount := handlers.MIN_AMOUNT
+	// Test: Transfer funds from one credit card to another
+	requireLogin(tommy, testServer.URL)
 
-	resp, err := transferFunds(testServer.URL, sender, receiver, email, amount)
+	resp, err := transferFunds(
+		testServer.URL,
+		tommysCreditCard.CardNo,
+		leesCreditCard.CardNo,
+		fmt.Sprintf("%v.key", tommy.Email),
+		1,
+	)
+	if err != nil {
+		t.Fatalf("Error making request; %v\n", err)
+	}
+
+	expectStatus(t, resp, http.StatusOK)
+	resp.Body.Close()
+
+	// Test: Transfer funds from one phone number to another
+	resp, err = transferFunds(
+		testServer.URL,
+		tommysCreditCard.PhoneNo,
+		leesCreditCard.PhoneNo,
+		fmt.Sprintf("%v.key", tommy.Email),
+		1,
+	)
 	if err != nil {
 		t.Fatalf("Error making request; %v\n", err)
 	}
 	defer resp.Body.Close()
 
-	printResponse(resp)
-	expectStatus(t, resp.StatusCode, http.StatusOK)
+	expectStatus(t, resp, http.StatusOK)
 }

@@ -70,3 +70,35 @@ func DeriveKey(password string, salt []byte) (*Argon2Key, error) {
 		memory, timeTaken, threads, salt, derivedKey,
 	)
 }
+
+type KeyReader struct {
+	Key []byte
+}
+
+// Read implements the io.Reader interface.
+// It fills the destination slice p with data from the Key, wrapping around as needed.
+func (r *KeyReader) Read(p []byte) (n int, err error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+
+	if len(p) <= len(r.Key) {
+		n = copy(p, r.Key)
+		return n, nil
+	}
+
+	// Destination slice is larger than the key, so we need to loop and wrap around.
+	for i := 0; i < len(p); i++ {
+		p[i] = r.Key[i%len(r.Key)]
+	}
+	return len(p), nil
+}
+
+func NewKeyReader(key []byte) (*KeyReader, error) {
+	if strings.TrimSpace(string(key)) == "" {
+		return nil, fmt.Errorf("key cannot be empty")
+	}
+	return &KeyReader{
+		Key: key,
+	}, nil
+}

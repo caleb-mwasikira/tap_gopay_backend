@@ -21,10 +21,25 @@ import (
 )
 
 var (
-	testUsername string = "tommy"
-	testEmail    string = "iamtommy@gmail.com"
-	testPassword string = "tommyhasagun"
+	tommy = NewUser("tommy", "iamtommy@gmail.com", "tommyhasagun")
+	lee   = NewUser("leejohnson", "leejohnson@gmail.com", "johnsonsandjohnsons")
 )
+
+type User struct {
+	Username string
+	Email    string
+	Password string
+	Phone    string
+}
+
+func NewUser(username, email, password string) User {
+	return User{
+		Username: username,
+		Email:    email,
+		Password: password,
+		Phone:    gofakeit.Phone(),
+	}
+}
 
 func uploadFile(
 	multipartWriter *multipart.Writer, fieldName string,
@@ -46,12 +61,11 @@ func TestRegister(t *testing.T) {
 	testServer := httptest.NewServer(r)
 	defer testServer.Close()
 
-	username := testUsername
-	email := testEmail
-	phoneNo := gofakeit.Phone()
-	password := testPassword
+	// Select random user
+	users := []User{tommy, lee}
+	user := randomChoice(users)
 
-	argon2Key, err := encrypt.DeriveKey(password, nil)
+	argon2Key, err := encrypt.DeriveKey(user.Password, nil)
 	if err != nil {
 		t.Fatalf("Error generating KDF password; %v\n", err)
 	}
@@ -59,12 +73,12 @@ func TestRegister(t *testing.T) {
 	var buff bytes.Buffer
 	multipartWriter := multipart.NewWriter(&buff)
 
-	multipartWriter.WriteField("username", username)
-	multipartWriter.WriteField("email", email)
-	multipartWriter.WriteField("phone_no", phoneNo)
+	multipartWriter.WriteField("username", user.Username)
+	multipartWriter.WriteField("email", user.Email)
+	multipartWriter.WriteField("phone_no", user.Phone)
 
 	// Fetch user's public key and PEM encode it
-	path := filepath.Join("keys", fmt.Sprintf("%v.key", email))
+	path := filepath.Join("keys", fmt.Sprintf("%v.key", user.Email))
 	privKey, err := getPrivateKey(path, argon2Key.Key)
 	if err != nil {
 		t.Fatalf("Error fetching user's private key; %v\n", err)
@@ -92,8 +106,7 @@ func TestRegister(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	printResponse(resp)
-	expectStatus(t, resp.StatusCode, http.StatusOK)
+	expectStatus(t, resp, http.StatusOK)
 }
 
 func TestLogin(t *testing.T) {
@@ -106,14 +119,12 @@ func TestLogin(t *testing.T) {
 		t.Fatalf("Error making request; %v\n", err)
 	}
 
-	printResponse(resp)
+	expectStatus(t, resp, http.StatusUnauthorized)
 	resp.Body.Close()
 
-	expectStatus(t, resp.StatusCode, http.StatusUnauthorized)
-
 	// Login
-	email := testEmail
-	password := testPassword
+	email := tommy.Email
+	password := tommy.Password
 
 	// Get user's password and generate longer password using KDF
 	argon2Key, err := encrypt.DeriveKey(password, nil)
@@ -150,8 +161,7 @@ func TestLogin(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	printResponse(resp)
-	expectStatus(t, resp.StatusCode, http.StatusOK)
+	expectStatus(t, resp, http.StatusOK)
 
 	cookies := resp.Cookies()
 	var loginCookie *http.Cookie
@@ -181,8 +191,7 @@ func TestLogin(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	printResponse(resp)
-	expectStatus(t, resp.StatusCode, http.StatusOK)
+	expectStatus(t, resp, http.StatusOK)
 }
 
 // Cannot test ForgotPassword and ResetPassword handlers as they require

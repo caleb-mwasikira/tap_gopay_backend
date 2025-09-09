@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/caleb-mwasikira/tap_gopay_backend/api"
@@ -13,8 +14,8 @@ import (
 )
 
 type TransactionRequest struct {
-	Sender    string  `json:"sender" validate:"card_no"`
-	Receiver  string  `json:"receiver" validate:"card_no"`
+	Sender    string  `json:"sender" validate:"account"`
+	Receiver  string  `json:"receiver" validate:"account"`
 	Amount    float64 `json:"amount" validate:"amount"`
 	CreatedAt string  `json:"created_at"` // RFC3339 formatted string
 
@@ -39,6 +40,24 @@ func (req TransactionRequest) Hash() []byte {
 
 	h := sha256.Sum256(data)
 	return h[:]
+}
+
+func getCreditCardOwnedBy(phone string) (*database.CreditCard, error) {
+	creditCards, err := database.GetAllCreditCardsOwnedBy(
+		phone,
+		func(cc *database.CreditCard) bool {
+			return cc.IsActive
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching credit cards owned by phone number; %v", err)
+	}
+
+	if len(creditCards) == 0 {
+		return nil, fmt.Errorf("no credit cards found owned by phone number")
+	}
+
+	return creditCards[0], nil
 }
 
 func TransferFunds(w http.ResponseWriter, r *http.Request) {
@@ -80,8 +99,37 @@ func TransferFunds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var (
+		sender   string = req.Sender
+		receiver string = req.Receiver
+	)
+
+	if isValidPhoneNumber(sender) {
+		creditCard, err := getCreditCardOwnedBy(sender)
+		if err != nil {
+			api.Errorf(w, "Sender has no active credit card accounts", err)
+			return
+		}
+		sender = creditCard.CardNo
+	}
+
+	if isValidPhoneNumber(receiver) {
+		creditCard, err := getCreditCardOwnedBy(receiver)
+		if err != nil {
+			api.Errorf(w, "Receiver has no active credit card accounts", err)
+			return
+		}
+		receiver = creditCard.CardNo
+	}
+
+	// Check that sender != receiver
+	if sender == receiver {
+		api.BadRequest(w, "Sender and receiver share the same account")
+		return
+	}
+
 	transaction, err := database.CreateTransaction(
-		req.Sender, req.Receiver, req.Amount,
+		sender, receiver, req.Amount,
 		req.CreatedAt, req.Signature,
 	)
 	if err != nil {

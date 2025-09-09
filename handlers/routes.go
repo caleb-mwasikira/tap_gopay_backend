@@ -24,7 +24,7 @@ func GetRoutes() *chi.Mux {
 			// Protected routes
 			r.Post("/new-credit-card", NewCreditCard)
 			r.Get("/credit-cards", GetAllCreditCards)
-			r.Get("/credit-cards/{card_no}", GetCreditCard)
+			r.Get("/credit-cards/{card_no}", GetCreditCardDetails)
 			r.Post("/credit-cards/{card_no}/freeze", FreezeCreditCard)
 			r.Post("/credit-cards/{card_no}/activate", ActivateCreditCard)
 			r.Post("/transfer-funds", TransferFunds)

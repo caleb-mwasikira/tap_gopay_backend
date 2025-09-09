@@ -74,7 +74,7 @@ func GetAllCreditCards(w http.ResponseWriter, r *http.Request) {
 	api.OK2(w, creditCards)
 }
 
-func GetCreditCard(w http.ResponseWriter, r *http.Request) {
+func GetCreditCardDetails(w http.ResponseWriter, r *http.Request) {
 	user, ok := getAuthUser(r)
 	if !ok {
 		api.Unauthorized(w)
@@ -87,7 +87,7 @@ func GetCreditCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	creditCard, err := database.GetCreditCard(user.Id, cardNo)
+	creditCard, err := database.GetCreditCardDetails(user.Id, cardNo)
 	if err != nil {
 		api.Errorf(w, "Error fetching credit card details", err)
 		return
@@ -115,7 +115,7 @@ func FreezeCreditCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	api.OK(w, fmt.Sprintf("Credit card %v deactivated successfully", cardNo))
+	api.OK(w, fmt.Sprintf("Credit card '%v' deactivated successfully", cardNo))
 }
 
 func ActivateCreditCard(w http.ResponseWriter, r *http.Request) {
@@ -137,5 +137,5 @@ func ActivateCreditCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	api.OK(w, fmt.Sprintf("Credit card %v activated successfully", cardNo))
+	api.OK(w, fmt.Sprintf("Credit card '%v' activated successfully", cardNo))
 }

@@ -42,7 +42,7 @@ func getPrivateKey(path string, seedPhrase []byte) (*ecdsa.PrivateKey, error) {
 
 // Test deterministic key generation using password + KDF
 func TestGenerateKeys(t *testing.T) {
-	argon2Key, err := encrypt.DeriveKey(testPassword, nil)
+	argon2Key, err := encrypt.DeriveKey(tommy.Password, nil)
 	if err != nil {
 		t.Fatalf("Error generating KDF based password; %v\n", err)
 	}

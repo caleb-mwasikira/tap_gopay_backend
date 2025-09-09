@@ -70,10 +70,18 @@ func validateStruct(obj any) error {
 					return err
 				}
 			}
-			if rule == "card_no" {
+			if rule == "account" {
 				str, _ := fieldValue.(string)
-				if err := validateCardNumber(str); err != nil {
-					return err
+
+				// Check if value is either a credit card number or phone number
+				err := validateCardNumber(str)
+				isCreditCardNumber := err == nil
+
+				err2 := validatePhoneNumber(str)
+				isPhoneNumber := err2 == nil
+
+				if !isCreditCardNumber && !isPhoneNumber {
+					return fmt.Errorf("%v must either be a credit card number or phone number", field.Name)
 				}
 			}
 			if rule == "amount" {
@@ -131,6 +139,16 @@ func validateEmail(email string) error {
 		return fmt.Errorf("invalid email address")
 	}
 	return nil
+}
+
+func isValidPhoneNumber(phone string) bool {
+	if isEmpty(phone) {
+		return false
+	}
+
+	// E.164 format: + followed by 8 to 15 digits
+	re := regexp.MustCompile(`^\+?[1-9]\d{7,14}$`)
+	return re.MatchString(phone)
 }
 
 func validatePhoneNumber(phone string) error {
