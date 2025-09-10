@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"net/mail"
 	"reflect"
-	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/caleb-mwasikira/tap_gopay_backend/encrypt"
+	"github.com/nyaruka/phonenumbers"
 )
 
 const (
@@ -146,9 +146,8 @@ func isValidPhoneNumber(phone string) bool {
 		return false
 	}
 
-	// E.164 format: + followed by 8 to 15 digits
-	re := regexp.MustCompile(`^\+?[1-9]\d{7,14}$`)
-	return re.MatchString(phone)
+	_, err := phonenumbers.Parse(phone, "KE")
+	return err == nil
 }
 
 func validatePhoneNumber(phone string) error {
@@ -156,9 +155,7 @@ func validatePhoneNumber(phone string) error {
 		return fmt.Errorf("phone number value cannot be empty")
 	}
 
-	// E.164 format: + followed by 8 to 15 digits
-	re := regexp.MustCompile(`^\+?[1-9]\d{7,14}$`)
-	if !re.MatchString(phone) {
+	if !isValidPhoneNumber(phone) {
 		return fmt.Errorf("invalid phone number")
 	}
 	return nil
