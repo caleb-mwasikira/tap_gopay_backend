@@ -1,7 +1,5 @@
 package database
 
-import "time"
-
 type CreditCard struct {
 	UserId         int     `json:"user_id"`
 	Username       string  `json:"username"`
@@ -14,14 +12,12 @@ type CreditCard struct {
 }
 
 func CreateCreditCard(userId int, cardNo string, amount float64) (*CreditCard, error) {
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	query := "INSERT INTO credit_cards(user_id, card_no, initial_deposit, created_at) VALUES(?, ?, ?, ?)"
+	query := "INSERT INTO credit_cards(user_id, card_no, initial_deposit) VALUES(?, ?, ?)"
 	_, err := db.Exec(
 		query,
 		userId,
 		cardNo,
 		amount,
-		now,
 	)
 	if err != nil {
 		return nil, err
