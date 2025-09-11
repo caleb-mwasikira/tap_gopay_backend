@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/caleb-mwasikira/tap_gopay_backend/encrypt"
 	"github.com/nyaruka/phonenumbers"
@@ -181,23 +182,28 @@ func isBase64Encoded(value string) bool {
 
 // Credit card number will be in the format
 //
-//	1234 5678 8765 5432
+//	1234 5678 8765 5432 or 1234567887655432
 func validateCardNumber(cardNo string) error {
 	// TODO: Implement credit card_no validation using the Luhn algorithm
 
 	cardNo = strings.TrimSpace(cardNo)
-	fields := strings.Split(cardNo, " ")
-	if len(fields) != 4 {
-		return fmt.Errorf("invalid card number format")
+	if cardNo == "" {
+		return fmt.Errorf("credit card number cannot be empty")
 	}
 
-	for _, field := range fields {
-		if _, err := strconv.Atoi(field); err != nil {
-			return fmt.Errorf("card number must contain numbers only")
-		}
-		if len(field) != 4 {
-			return fmt.Errorf("invalid card number format")
+	cardNo = strings.ReplaceAll(cardNo, " ", "")
+
+	if len(cardNo) < MIN_CREDIT_CARD_LEN {
+		return fmt.Errorf("credit can number too short")
+	}
+
+	// Check that credit card number is made up of digits only
+	for _, char := range cardNo {
+		isDigit := unicode.IsDigit(char)
+		if !isDigit {
+			return fmt.Errorf("credit card number must be made up of digits only")
 		}
 	}
+
 	return nil
 }

@@ -22,8 +22,14 @@ type Transaction struct {
 	Sender        Account `json:"sender"`
 	Receiver      Account `json:"receiver"`
 	Amount        float64 `json:"amount"`
-	CreatedAt     string  `json:"created_at"` // RFC3339 formatted string
-	Signature     string  `json:"signature"`
+
+	// Time when transaction was initiated by client - signed by client
+	Timestamp   string `json:"timestamp"`
+	Signature   string `json:"signature"`
+	PublicKeyId string `json:"public_key_id"`
+
+	// Time when record was saved to database
+	CreatedAt string `json:"created_at"`
 }
 
 func generateRandomChar() string {
@@ -54,26 +60,30 @@ func generateTransactionId() string {
 func CreateTransaction(
 	sender, receiver string,
 	amount float64,
-	created_at, signature string,
+	timestamp, signature string,
+	public_key_id string,
 ) (*Transaction, error) {
 	transactionId := generateTransactionId()
-	now := time.Now().Format(time.RFC3339)
 
 	query := `
 	INSERT INTO transactions(
-		transaction_id, 
-		sender, receiver, 
-		amount, created_at, 
-		signature
-	) VALUES(?, ?, ?, ?, ?, ?)`
+		transaction_id,
+		sender,
+		receiver,
+		amount,
+		timestamp,
+		signature,
+		public_key_id
+	) VALUES(?, ?, ?, ?, ?, ?, ?)`
 	_, err := db.Exec(
 		query,
 		transactionId,
 		sender,
 		receiver,
 		amount,
-		now,
+		timestamp,
 		signature,
+		public_key_id,
 	)
 	if err != nil {
 		return nil, err
@@ -97,7 +107,9 @@ func GetTransaction(transactionId string) (*Transaction, error) {
 			receivers_phone,
 			receivers_card_no,
 			amount,
+			timestamp,
 			signature,
+			public_key_id,
 			created_at
 		FROM transaction_details
 		WHERE transaction_id= ?
@@ -112,7 +124,9 @@ func GetTransaction(transactionId string) (*Transaction, error) {
 		&receiver.PhoneNo,
 		&receiver.CardNo,
 		&t.Amount,
+		&t.Timestamp,
 		&t.Signature,
+		&t.PublicKeyId,
 		&t.CreatedAt,
 	)
 	if err != nil {
@@ -135,7 +149,9 @@ func GetRecentTransactions(sendersCardNo string) ([]*Transaction, error) {
 			receivers_phone,
 			receivers_card_no,
 			amount,
+			timestamp,
 			signature,
+			public_key_id,
 			created_at
 		FROM transaction_details
 		WHERE senders_card_no= ?
@@ -160,7 +176,9 @@ func GetRecentTransactions(sendersCardNo string) ([]*Transaction, error) {
 			&t.Receiver.PhoneNo,
 			&t.Receiver.CardNo,
 			&t.Amount,
+			&t.Timestamp,
 			&t.Signature,
+			&t.PublicKeyId,
 			&t.CreatedAt,
 		)
 		if err != nil {
@@ -177,39 +195,51 @@ type RequestFundsResult struct {
 	Sender        string  `json:"sender"`
 	Receiver      string  `json:"receiver"`
 	Amount        float64 `json:"amount"`
-	CreatedAt     string  `json:"created_at"` // RFC3339 formatted string
-	Signature     string  `json:"signature"`
+
+	// Time when transaction was initiated by client
+	Timestamp   string `json:"timestamp"`
+	Signature   string `json:"signature"`
+	PublicKeyId string `json:"public_key_id"`
+
+	// Time when record was saved to database
+	CreatedAt string `json:"created_at"`
 }
 
 func CreateRequestFunds(
 	sender, receiver string,
 	amount float64,
-	created_at, signature string,
+	timestamp, signature string,
+	publicKeyId string,
 ) (*RequestFundsResult, error) {
 	t := RequestFundsResult{
 		TransactionId: generateTransactionId(),
 		Sender:        sender,
 		Receiver:      receiver,
 		Amount:        amount,
-		CreatedAt:     created_at,
+		Timestamp:     timestamp,
 		Signature:     signature,
+		PublicKeyId:   publicKeyId,
 	}
 
 	query := `
 	INSERT INTO request_funds(
 		transaction_id,
-		sender, receiver, 
-		amount, created_at, 
-		signature
-	) VALUES(?, ?, ?, ?, ?, ?)`
+		sender,
+		receiver,
+		amount,
+		timestamp,
+		signature,
+		public_key_id
+	) VALUES(?, ?, ?, ?, ?, ?, ?)`
 	_, err := db.Exec(
 		query,
 		t.TransactionId,
 		t.Sender,
 		t.Receiver,
 		t.Amount,
-		t.CreatedAt,
+		t.Timestamp,
 		t.Signature,
+		t.PublicKeyId,
 	)
 	return &t, err
 }

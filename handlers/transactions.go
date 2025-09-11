@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -19,7 +20,7 @@ type TransactionRequest struct {
 	Sender    string  `json:"sender" validate:"account"`
 	Receiver  string  `json:"receiver" validate:"account"`
 	Amount    float64 `json:"amount" validate:"amount"`
-	CreatedAt string  `json:"created_at"` // RFC3339 formatted string
+	Timestamp string  `json:"timestamp"` // Time when transaction was initiated by the client
 
 	// Base64 encoded signature
 	// Request signed by sender
@@ -31,13 +32,13 @@ func (req TransactionRequest) Hash() []byte {
 		Sender    string  `json:"sender"`
 		Receiver  string  `json:"receiver"`
 		Amount    float64 `json:"amount"`
-		CreatedAt string  `json:"created_at"`
+		Timestamp string  `json:"timestamp"`
 		// We purposefully omit the signature
 	}{
 		Sender:    req.Sender,
 		Receiver:  req.Receiver,
 		Amount:    req.Amount,
-		CreatedAt: req.CreatedAt,
+		Timestamp: req.Timestamp,
 	})
 
 	h := sha256.Sum256(data)
@@ -62,6 +63,24 @@ func getCreditCardOwnedBy(phone string) (*database.CreditCard, error) {
 	return creditCards[0], nil
 }
 
+func verifySignature(pubKeyBytes []byte, data []byte, b64EncodedSignature string) error {
+	pubKey, err := encrypt.LoadPublicKeyFromBytes(pubKeyBytes)
+	if err != nil {
+		return fmt.Errorf("error loading public key; %v", err)
+	}
+
+	signature, err := base64.StdEncoding.DecodeString(b64EncodedSignature)
+	if err != nil {
+		return fmt.Errorf("error base64 decoding signature; %v", err)
+	}
+
+	ok := ecdsa.VerifyASN1(pubKey, data, signature)
+	if !ok {
+		return fmt.Errorf("invalid signature")
+	}
+	return nil
+}
+
 func TransferFunds(w http.ResponseWriter, r *http.Request) {
 	user, ok := getAuthUser(r)
 	if !ok {
@@ -72,7 +91,7 @@ func TransferFunds(w http.ResponseWriter, r *http.Request) {
 	var req TransactionRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		api.BadRequest(w, "sender, receiver, amount, created_at and signature fields required")
+		api.BadRequest(w, "sender, receiver, amount, timestamp and signature fields required")
 		return
 	}
 
@@ -81,58 +100,42 @@ func TransferFunds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Load sender's public key to verify signature on send funds request
-	sendersPubKey, err := encrypt.LoadPublicKeyFromBytes(user.PublicKey)
+	data := req.Hash()
+	err = verifySignature(user.PublicKey, data, req.Signature)
 	if err != nil {
-		api.Errorf(w, "Error decoding senders public key", err)
+		api.Errorf(w, "Error sending funds. Signature verification failed", err)
 		return
 	}
 
-	signature, err := base64.StdEncoding.DecodeString(req.Signature)
-	if err != nil {
-		api.BadRequest(w, "Error transferring funds. Invalid signature")
-		return
-	}
-
-	digest := req.Hash()
-	ok = ecdsa.VerifyASN1(sendersPubKey, digest, signature)
-	if !ok {
-		api.Errorf(w, "Error transferring funds. Signature verification failed", nil)
-		return
-	}
-
-	var (
-		sender   string = req.Sender
-		receiver string = req.Receiver
-	)
-
-	if isValidPhoneNumber(sender) {
-		creditCard, err := getCreditCardOwnedBy(sender)
+	if isValidPhoneNumber(req.Sender) {
+		creditCard, err := getCreditCardOwnedBy(req.Sender)
 		if err != nil {
 			api.Errorf(w, "Sender has no active credit card accounts", err)
 			return
 		}
-		sender = creditCard.CardNo
+		req.Sender = creditCard.CardNo
 	}
 
-	if isValidPhoneNumber(receiver) {
-		creditCard, err := getCreditCardOwnedBy(receiver)
+	if isValidPhoneNumber(req.Receiver) {
+		creditCard, err := getCreditCardOwnedBy(req.Receiver)
 		if err != nil {
 			api.Errorf(w, "Receiver has no active credit card accounts", err)
 			return
 		}
-		receiver = creditCard.CardNo
+		req.Receiver = creditCard.CardNo
 	}
 
-	// Check that sender != receiver
-	if sender == receiver {
+	if req.Sender == req.Receiver {
 		api.BadRequest(w, "Sender and receiver share the same account")
 		return
 	}
 
+	pubKeyId := sha256.Sum256(user.PublicKey)
+
 	transaction, err := database.CreateTransaction(
-		sender, receiver, req.Amount,
-		req.CreatedAt, req.Signature,
+		req.Sender, req.Receiver, req.Amount,
+		req.Timestamp, req.Signature,
+		hex.EncodeToString(pubKeyId[:]),
 	)
 	if err != nil {
 		api.Errorf(w, "Error transferring funds", err)
@@ -162,31 +165,20 @@ func RequestFunds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Load receivers public key
-	receiversPubKey, err := encrypt.LoadPublicKeyFromBytes(user.PublicKey)
+	data := req.Hash()
+	err = verifySignature(user.PublicKey, data, req.Signature)
 	if err != nil {
-		api.Errorf(w, "Error decoding receiver's public key", err)
-		return
-	}
-
-	signature, err := base64.StdEncoding.DecodeString(req.Signature)
-	if err != nil {
-		api.BadRequest(w, "Error transferring funds. Invalid signature")
-		return
-	}
-
-	// Verify request signature belongs to the receiver
-	digest := req.Hash()
-	ok = ecdsa.VerifyASN1(receiversPubKey, digest, signature)
-	if !ok {
 		api.Errorf(w, "Error requesting funds. Signature verification failed", nil)
 		return
 	}
 
 	// Add record to database
+	pubKeyId := sha256.Sum256(user.PublicKey)
+
 	transaction, err := database.CreateRequestFunds(
 		req.Sender, req.Receiver, req.Amount,
-		req.CreatedAt, req.Signature,
+		req.Timestamp, req.Signature,
+		hex.EncodeToString(pubKeyId[:]),
 	)
 	if err != nil {
 		api.Errorf(w, "Error requesting funds", err)

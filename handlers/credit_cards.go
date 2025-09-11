@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	CREDIT_CARD_MIN_LEN         int     = 16
+	MIN_CREDIT_CARD_LEN         int     = 16
 	CREDIT_CARD_INITIAL_DEPOSIT float64 = 100
 )
 
@@ -25,7 +25,7 @@ func generateCreditCardNo() string {
 	str := strings.Builder{}
 	index := 0
 
-	for range CREDIT_CARD_MIN_LEN {
+	for range MIN_CREDIT_CARD_LEN {
 		if index != 0 && (index%4) == 0 {
 			str.WriteString(" ")
 		}
