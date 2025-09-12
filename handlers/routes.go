@@ -27,6 +27,7 @@ func GetRoutes() *chi.Mux {
 			r.Get("/credit-cards/{card_no}", GetCreditCardDetails)
 			r.Post("/credit-cards/{card_no}/freeze", FreezeCreditCard)
 			r.Post("/credit-cards/{card_no}/activate", ActivateCreditCard)
+			r.Post("/credit-cards/{card_no}/limit", SetOrUpdateLimit)
 			r.Post("/transfer-funds", TransferFunds)
 			r.Post("/request-funds", RequestFunds)
 			r.Get("/recent-transactions/{card_no}", GetRecentTransactions)

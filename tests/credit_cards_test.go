@@ -21,7 +21,22 @@ import (
 	"github.com/caleb-mwasikira/tap_gopay_backend/handlers"
 )
 
+var (
+	cookiesCache = map[string][]*http.Cookie{}
+)
+
 func requireLogin(user User, serverUrl string) {
+	// Check if user logged in before
+	cookies, ok := cookiesCache[user.Email]
+	if ok {
+		url, err := url.Parse(serverUrl)
+		if err != nil {
+			log.Fatalf("Error parsing url; %v\n", err)
+		}
+		http.DefaultClient.Jar.SetCookies(url, cookies)
+		return
+	}
+
 	// Get user's password and generate longer password using KDF
 	argon2Key, err := encrypt.DeriveKey(user.Password, nil)
 	if err != nil {
@@ -62,11 +77,16 @@ func requireLogin(user User, serverUrl string) {
 	}
 
 	// Extract login cookies and set them in cookiejar
+	cookies = resp.Cookies()
+
 	url, err := url.Parse(serverUrl)
 	if err != nil {
 		log.Fatalf("Error parsing url; %v\n", err)
 	}
-	http.DefaultClient.Jar.SetCookies(url, resp.Cookies())
+	http.DefaultClient.Jar.SetCookies(url, cookies)
+
+	// Cache cookies
+	cookiesCache[user.Email] = cookies
 }
 
 func TestNewCreditCard(t *testing.T) {
@@ -79,7 +99,6 @@ func TestNewCreditCard(t *testing.T) {
 
 	requireLogin(*user, testServer.URL)
 
-	// Send public key to server
 	resp, err := http.Post(
 		testServer.URL+"/new-credit-card", jsonContentType, nil,
 	)
@@ -88,8 +107,7 @@ func TestNewCreditCard(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	body :=
-		expectStatus(t, resp, http.StatusOK)
+	body := expectStatus(t, resp, http.StatusOK)
 
 	// Check if request body contains created credit card
 	var creditCard database.CreditCard
@@ -217,7 +235,7 @@ func getUsersCreditCard(
 	}
 	creditCard := randomChoice(creditCards)
 	if creditCard == nil {
-		return nil, fmt.Errorf("no credit card found with provided parameters")
+		return nil, fmt.Errorf("no credit cards found")
 	}
 	return creditCard, nil
 }

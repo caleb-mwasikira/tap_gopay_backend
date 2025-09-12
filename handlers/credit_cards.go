@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/rand/v2"
 	"net/http"
@@ -138,4 +139,38 @@ func ActivateCreditCard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	api.OK(w, fmt.Sprintf("Credit card '%v' activated successfully", cardNo))
+}
+
+type SetupLimitRequest struct {
+	Period string  `json:"period" validate:"period"`
+	Amount float64 `json:"amount" validate:"amount"`
+}
+
+func SetOrUpdateLimit(w http.ResponseWriter, r *http.Request) {
+	cardNo := chi.URLParam(r, "card_no")
+	if err := validateCardNumber(cardNo); err != nil {
+		api.BadRequest(w, err.Error())
+		return
+	}
+
+	var req SetupLimitRequest
+
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		api.BadRequest(w, "Invalid request body. Missing fields 'card_no' and 'amount'")
+		return
+	}
+
+	if err := validateStruct(req); err != nil {
+		api.BadRequest(w, err.Error())
+		return
+	}
+
+	err = database.SetOrUpdateLimit(cardNo, req.Period, req.Amount)
+	if err != nil {
+		api.Errorf(w, "Error setting or updating spending limits", err)
+		return
+	}
+
+	api.OK(w, "Successfully setup new spending limit")
 }

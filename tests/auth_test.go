@@ -15,12 +15,18 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/brianvoe/gofakeit/v6"
 	"github.com/caleb-mwasikira/tap_gopay_backend/encrypt"
 	"github.com/caleb-mwasikira/tap_gopay_backend/handlers"
 )
 
 var (
+	phoneNumbers = []string{
+		"+254 130761229", "+254 120760991",
+		"+254 736414224", "+254 120754951",
+		"+254 737635477", "+254 113216258",
+		"+254 729982335", "+254 130132427",
+		"+254 745985969", "+254 709367512",
+	}
 	tommy = NewUser("tommy", "iamtommy@gmail.com", "tommyhasagun")
 	lee   = NewUser("leejohnson", "leejohnson@gmail.com", "johnsonsandjohnsons")
 )
@@ -37,7 +43,7 @@ func NewUser(username, email, password string) User {
 		Username: username,
 		Email:    email,
 		Password: password,
-		Phone:    gofakeit.Phone(),
+		Phone:    *randomChoice(phoneNumbers),
 	}
 }
 

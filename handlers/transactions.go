@@ -130,6 +130,13 @@ func TransferFunds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check amount is within spending limits
+	ok = database.IsWithinSpendingLimits(req.Sender, req.Amount)
+	if !ok {
+		api.Conflict(w, "Credit card exceeded spending limits")
+		return
+	}
+
 	pubKeyId := sha256.Sum256(user.PublicKey)
 
 	transaction, err := database.CreateTransaction(

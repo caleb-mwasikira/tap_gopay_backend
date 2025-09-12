@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/mail"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -71,6 +72,12 @@ func validateStruct(obj any) error {
 					return err
 				}
 			}
+			if rule == "card_no" {
+				str, _ := fieldValue.(string)
+				if err := validateCardNumber(str); err != nil {
+					return err
+				}
+			}
 			if rule == "account" {
 				str, _ := fieldValue.(string)
 
@@ -100,6 +107,12 @@ func validateStruct(obj any) error {
 			if rule == "public_key" {
 				data, _ := fieldValue.([]byte)
 				if err := validatePublicKey(data); err != nil {
+					return err
+				}
+			}
+			if rule == "period" {
+				str, _ := fieldValue.(string)
+				if err := validatePeriod(str); err != nil {
 					return err
 				}
 			}
@@ -147,8 +160,11 @@ func isValidPhoneNumber(phone string) bool {
 		return false
 	}
 
-	_, err := phonenumbers.Parse(phone, "KE")
-	return err == nil
+	phoneNo, err := phonenumbers.Parse(phone, "KE")
+	if err != nil {
+		return false
+	}
+	return phonenumbers.IsValidNumber(phoneNo)
 }
 
 func validatePhoneNumber(phone string) error {
@@ -205,5 +221,15 @@ func validateCardNumber(cardNo string) error {
 		}
 	}
 
+	return nil
+}
+
+// Used for setting spending limits on credit cards.
+// Expects period value to be one of ['week', 'month', 'year']
+func validatePeriod(period string) error {
+	allowedPeriods := []string{"week", "month", "year"}
+	if !slices.Contains(allowedPeriods, period) {
+		return fmt.Errorf("invalid period. Expects period value to be one of ['week', 'month', 'year']")
+	}
 	return nil
 }
