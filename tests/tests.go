@@ -35,15 +35,7 @@ func init() {
 	r = handlers.GetRoutes()
 }
 
-// Checks the response for expected status code.
-// Fails if response status code does NOT match expected status code.
-func expectStatus(t *testing.T, resp *http.Response, expectedStatusCode int) []byte {
-	// Print response
-	colorCode := COLOR_RED
-	if resp.StatusCode == expectedStatusCode {
-		colorCode = COLOR_GREEN
-	}
-
+func printResponse(resp *http.Response, colorCode string) []byte {
 	fmt.Println(colorCode)
 	fmt.Printf("%v %v %v\n", resp.Request.Method, resp.Request.URL, resp.Status)
 
@@ -53,6 +45,19 @@ func expectStatus(t *testing.T, resp *http.Response, expectedStatusCode int) []b
 	}
 	fmt.Printf("Body:\n%s\n", string(body))
 	fmt.Println(COLOR_RESET)
+
+	return body
+}
+
+// Checks the response for expected status code.
+// Fails if response status code does NOT match expected status code.
+func expectStatus(t *testing.T, resp *http.Response, expectedStatusCode int) []byte {
+	colorCode := COLOR_RED
+	if resp.StatusCode == expectedStatusCode {
+		colorCode = COLOR_GREEN
+	}
+
+	body := printResponse(resp, colorCode)
 
 	// Check status code
 	if resp.StatusCode != expectedStatusCode {

@@ -49,7 +49,7 @@ func (key Argon2Key) String() string {
 //	$id=argon2id$version=%d$memory=%d$time=%d$threads=%d$salt=b64-encoded$key=b64-encoded
 //
 // Note: salt and key are base64 encoded values
-func DeriveKey(password string, salt []byte) (*Argon2Key, error) {
+func generateArgon2Key(password string, salt []byte) (*Argon2Key, error) {
 	if strings.TrimSpace(password) == "" {
 		return nil, fmt.Errorf("password cannot be empty")
 	}

@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -42,27 +43,48 @@ func RequireAndroidApiKeyMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+func getAccessTokenFromCookies(r *http.Request) (string, error) {
+	cookie, err := r.Cookie(LOGIN_COOKIE)
+	if err != nil {
+		return "", err
+	}
+
+	accessToken := cookie.Value
+	return accessToken, nil
+}
+
+func getAccessTokenFromHeaders(r *http.Request) (string, error) {
+	auth := r.Header.Get("Authorization")
+	fields := strings.Split(auth, " ")
+	if len(fields) != 2 {
+		return "", fmt.Errorf("expected Authorization header to use format Bearer <token>")
+	}
+
+	accesToken := fields[1]
+	return accesToken, nil
+}
+
 func RequireAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Fetch access token from user's cookies
-		cookie, err := r.Cookie(LOGIN_COOKIE)
-		if err != nil {
+		cookieAccessToken, err := getAccessTokenFromCookies(r)
+		headerAccessToken, err2 := getAccessTokenFromHeaders(r)
+
+		if err != nil && err2 != nil {
 			api.Unauthorized2(w, "Access to this route requires user login")
 			return
 		}
-
-		accessToken := cookie.Value
 
 		var user database.User
-		if !validToken(accessToken, &user) {
-			api.Unauthorized2(w, "Access to this route requires user login")
+
+		if validToken(cookieAccessToken, &user) || validToken(headerAccessToken, &user) {
+			// Embed user into context
+			newCtx := context.WithValue(r.Context(), USER_CTX_KEY, &user)
+
+			next.ServeHTTP(w, r.WithContext(newCtx))
 			return
 		}
 
-		// Embed user into context
-		newCtx := context.WithValue(r.Context(), USER_CTX_KEY, &user)
-
-		next.ServeHTTP(w, r.WithContext(newCtx))
+		api.Unauthorized2(w, "Access to this route requires user login")
 	})
 }
 
