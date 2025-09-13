@@ -21,6 +21,8 @@ func GetRoutes() *chi.Mux {
 		r.Group(func(r chi.Router) {
 			r.Use(RequireAuthMiddleware)
 
+			r.HandleFunc("/ws-notifications", wsNotifyReceivedFunds)
+
 			// Protected routes
 			r.Post("/new-wallet", CreateWallet)
 			r.Get("/wallets", GetAllWallets)

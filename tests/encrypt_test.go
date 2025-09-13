@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"bytes"
 	"crypto/ecdsa"
 	"crypto/sha256"
 	"os"
@@ -11,17 +10,12 @@ import (
 )
 
 // Reads private key from file.
-// If reading private key fails the func generates a new private key
-// using provided seed phrase.
-// The private key is saved to the same file that was to be read.
-func getOrGeneratePrivateKey(path string, seedPhrase []byte) (*ecdsa.PrivateKey, error) {
-	privateKey, err := encrypt.LoadPrivateKeyFromFile(path)
-	if err == nil {
-		return privateKey, nil
-	}
+func getPrivateKey(path string) (*ecdsa.PrivateKey, error) {
+	return encrypt.LoadPrivateKeyFromFile(path)
+}
 
-	reader := bytes.NewBuffer(seedPhrase)
-	privKey, _, err := encrypt.GenerateKeyPair(reader)
+func generatePrivateKey(path string, password string) (*ecdsa.PrivateKey, error) {
+	privKey, _, err := encrypt.GenerateKeyPair(password)
 	if err != nil {
 		return nil, err
 	}
@@ -37,14 +31,8 @@ func getOrGeneratePrivateKey(path string, seedPhrase []byte) (*ecdsa.PrivateKey,
 
 // Test deterministic key generation using password + KDF
 func TestGenerateKeys(t *testing.T) {
-	argon2Key, err := encrypt.DeriveKey(tommy.Password, nil)
-	if err != nil {
-		t.Fatalf("Error generating KDF based password; %v\n", err)
-	}
-
 	// Generate 1st key pair and hash private key
-	reader := bytes.NewBuffer(argon2Key.Key)
-	privKey, _, err := encrypt.GenerateKeyPair(reader)
+	privKey, _, err := encrypt.GenerateKeyPair(tommy.Password)
 	if err != nil {
 		t.Fatalf("Unexpected error generating key pair; %v", err)
 	}
@@ -56,8 +44,7 @@ func TestGenerateKeys(t *testing.T) {
 	hash1 := sha256.Sum256(privKeyBytes)
 
 	// Generate 2nd key pair and hash private key
-	reader = bytes.NewBuffer(argon2Key.Key)
-	privKey, _, err = encrypt.GenerateKeyPair(reader)
+	privKey, _, err = encrypt.GenerateKeyPair(tommy.Password)
 	if err != nil {
 		t.Fatalf("Unexpected error generating key pair; %v", err)
 	}

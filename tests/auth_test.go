@@ -66,17 +66,10 @@ func uploadFile(
 	return err
 }
 
-func createAccount(testServerUrl string, user User) (*http.Response, error) {
-	// First we create a stronger key from the user's password
-	key, err := encrypt.DeriveKey(user.Password, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	// Then we use the key to generate user's private key
+func createAccount(serverUrl string, user User) (*http.Response, error) {
 	path := filepath.Join("keys", fmt.Sprintf("%v.key", user.Email))
 
-	privKey, err := getOrGeneratePrivateKey(path, key.Key)
+	privKey, err := generatePrivateKey(path, user.Password)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +96,7 @@ func createAccount(testServerUrl string, user User) (*http.Response, error) {
 
 	// Send request
 	resp, err := http.Post(
-		testServerUrl+"/auth/register",
+		serverUrl+"/auth/register",
 		multipartWriter.FormDataContentType(),
 		&buff,
 	)
@@ -146,17 +139,10 @@ func TestLogin(t *testing.T) {
 
 	// Login
 	email := tommy.Email
-	password := tommy.Password
-
-	// Get user's password and generate longer password using KDF
-	key, err := encrypt.DeriveKey(password, nil)
-	if err != nil {
-		t.Fatalf("Error generating KDF password; %v\n", err)
-	}
 
 	// Fetch or generate user's private key for signing
 	path := filepath.Join("keys", fmt.Sprintf("%v.key", email))
-	privKey, err := getOrGeneratePrivateKey(path, key.Key)
+	privKey, err := getPrivateKey(path)
 	if err != nil {
 		t.Fatalf("Error fetching user's private key; %v\n", err)
 	}
@@ -216,7 +202,10 @@ func TestLogin(t *testing.T) {
 	expectStatus(t, resp, http.StatusOK)
 }
 
-func requireLogin(user User, serverUrl string) {
+// Logs in to a users account.
+// Sets any cookies returned from server to DefaultClient.Jar
+// Returns access token to caller in case they require it
+func requireLogin(user User, serverUrl string) string {
 	// Check if user logged in before
 	cookies, ok := cookiesCache[user.Email]
 	if ok {
@@ -225,18 +214,19 @@ func requireLogin(user User, serverUrl string) {
 			log.Fatalf("Error parsing url; %v\n", err)
 		}
 		http.DefaultClient.Jar.SetCookies(url, cookies)
-		return
-	}
 
-	// Get user's password and generate longer password using KDF
-	key, err := encrypt.DeriveKey(user.Password, nil)
-	if err != nil {
-		log.Fatalf("Error generating KDF password; %v\n", err)
+		for _, cookie := range cookies {
+			if cookie.Name == handlers.LOGIN_COOKIE {
+				return cookie.Value
+			}
+		}
+
+		return ""
 	}
 
 	// Fetch or generate user's private key for signing
 	path := filepath.Join("keys", fmt.Sprintf("%v.key", user.Email))
-	privKey, err := getOrGeneratePrivateKey(path, key.Key)
+	privKey, err := getPrivateKey(path)
 	if err != nil {
 		log.Fatalf("Error fetching user's private key; %v\n", err)
 	}
@@ -278,6 +268,13 @@ func requireLogin(user User, serverUrl string) {
 
 	// Cache cookies
 	cookiesCache[user.Email] = cookies
+
+	for _, cookie := range cookies {
+		if cookie.Name == handlers.LOGIN_COOKIE {
+			return cookie.Value
+		}
+	}
+	return ""
 }
 
 // Cannot test ForgotPassword and ResetPassword handlers as they require

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
@@ -148,6 +149,21 @@ func TransferFunds(w http.ResponseWriter, r *http.Request) {
 		api.Errorf(w, "Error transferring funds", err)
 		return
 	}
+
+	go func(transaction database.Transaction) {
+		mutex.RLock()
+		conn, ok := clients[transaction.Receiver.Address]
+		mutex.RUnlock()
+
+		if ok {
+			// Notify receiver of received funds
+			err := conn.WriteJSON(&transaction)
+			if err != nil {
+				log.Printf("Error notifying receiver of received funds")
+			}
+		}
+
+	}(*transaction)
 
 	api.OK2(w, transaction)
 }
