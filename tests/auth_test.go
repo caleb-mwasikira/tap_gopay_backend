@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -29,6 +30,8 @@ var (
 	}
 	tommy = NewUser("tommy", "iamtommy@gmail.com", "tommyhasagun")
 	lee   = NewUser("leejohnson", "leejohnson@gmail.com", "johnsonsandjohnsons")
+
+	cookiesCache = map[string][]*http.Cookie{}
 )
 
 type User struct {
@@ -63,19 +66,22 @@ func uploadFile(
 	return err
 }
 
-func TestRegister(t *testing.T) {
-	testServer := httptest.NewServer(r)
-	defer testServer.Close()
-
-	// Select random user
-	users := []User{tommy, lee}
-	user := randomChoice(users)
-
-	argon2Key, err := encrypt.DeriveKey(user.Password, nil)
+func createAccount(testServerUrl string, user User) (*http.Response, error) {
+	// First we create a stronger key from the user's password
+	key, err := encrypt.DeriveKey(user.Password, nil)
 	if err != nil {
-		t.Fatalf("Error generating KDF password; %v\n", err)
+		return nil, err
 	}
 
+	// Then we use the key to generate user's private key
+	path := filepath.Join("keys", fmt.Sprintf("%v.key", user.Email))
+
+	privKey, err := getOrGeneratePrivateKey(path, key.Key)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create multipart/form-data request
 	var buff bytes.Buffer
 	multipartWriter := multipart.NewWriter(&buff)
 
@@ -83,36 +89,46 @@ func TestRegister(t *testing.T) {
 	multipartWriter.WriteField("email", user.Email)
 	multipartWriter.WriteField("phone_no", user.Phone)
 
-	// Fetch user's public key and PEM encode it
-	path := filepath.Join("keys", fmt.Sprintf("%v.key", user.Email))
-	privKey, err := getPrivateKey(path, argon2Key.Key)
-	if err != nil {
-		t.Fatalf("Error fetching user's private key; %v\n", err)
-	}
+	// Upload public key
 	pubKeyBytes, err := encrypt.PemEncodePublicKey(&privKey.PublicKey)
 	if err != nil {
-		t.Fatalf("Error PEM encoding public key; %v\n", err)
+		return nil, err
 	}
 
-	// Upload public key
 	err = uploadFile(multipartWriter, handlers.PUBLIC_KEY, pubKeyBytes)
 	if err != nil {
-		t.Fatalf("Error uploading PUBLIC_KEY file; %v\n", err)
+		return nil, err
 	}
 	multipartWriter.Close()
 
 	// Send request
 	resp, err := http.Post(
-		testServer.URL+"/auth/register",
+		testServerUrl+"/auth/register",
 		multipartWriter.FormDataContentType(),
 		&buff,
 	)
 	if err != nil {
-		t.Fatalf("Error making request; %v\n", err)
+		return nil, err
 	}
-	defer resp.Body.Close()
 
-	expectStatus(t, resp, http.StatusOK)
+	return resp, nil
+}
+
+func TestRegister(t *testing.T) {
+	testServer := httptest.NewServer(r)
+	defer testServer.Close()
+
+	users := []User{tommy, lee}
+
+	for _, user := range users {
+		resp, err := createAccount(testServer.URL, user)
+		if err != nil {
+			t.Fatalf("Error making request; %v\n", err)
+		}
+		expectStatus(t, resp, http.StatusOK)
+		resp.Body.Close()
+	}
+
 }
 
 func TestLogin(t *testing.T) {
@@ -133,14 +149,14 @@ func TestLogin(t *testing.T) {
 	password := tommy.Password
 
 	// Get user's password and generate longer password using KDF
-	argon2Key, err := encrypt.DeriveKey(password, nil)
+	key, err := encrypt.DeriveKey(password, nil)
 	if err != nil {
 		t.Fatalf("Error generating KDF password; %v\n", err)
 	}
 
 	// Fetch or generate user's private key for signing
 	path := filepath.Join("keys", fmt.Sprintf("%v.key", email))
-	privKey, err := getPrivateKey(path, argon2Key.Key)
+	privKey, err := getOrGeneratePrivateKey(path, key.Key)
 	if err != nil {
 		t.Fatalf("Error fetching user's private key; %v\n", err)
 	}
@@ -198,6 +214,70 @@ func TestLogin(t *testing.T) {
 	defer resp.Body.Close()
 
 	expectStatus(t, resp, http.StatusOK)
+}
+
+func requireLogin(user User, serverUrl string) {
+	// Check if user logged in before
+	cookies, ok := cookiesCache[user.Email]
+	if ok {
+		url, err := url.Parse(serverUrl)
+		if err != nil {
+			log.Fatalf("Error parsing url; %v\n", err)
+		}
+		http.DefaultClient.Jar.SetCookies(url, cookies)
+		return
+	}
+
+	// Get user's password and generate longer password using KDF
+	key, err := encrypt.DeriveKey(user.Password, nil)
+	if err != nil {
+		log.Fatalf("Error generating KDF password; %v\n", err)
+	}
+
+	// Fetch or generate user's private key for signing
+	path := filepath.Join("keys", fmt.Sprintf("%v.key", user.Email))
+	privKey, err := getOrGeneratePrivateKey(path, key.Key)
+	if err != nil {
+		log.Fatalf("Error fetching user's private key; %v\n", err)
+	}
+
+	// Sign user's email
+	digest := sha256.Sum256([]byte(user.Email))
+	signature, err := ecdsa.SignASN1(rand.Reader, privKey, digest[:])
+	if err != nil {
+		log.Fatalf("Error signing user's email; %v\n", err)
+	}
+
+	req := handlers.LoginRequest{
+		Email:     user.Email,
+		Signature: base64.StdEncoding.EncodeToString(signature),
+	}
+	body, err := json.Marshal(&req)
+	if err != nil {
+		log.Fatalf("Error marshalling login request; %v\n", err)
+	}
+
+	resp, err := http.Post(serverUrl+"/auth/login", jsonContentType, bytes.NewBuffer(body))
+	if err != nil {
+		log.Fatalf("Error making login request; %v\n", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Fatalf("Expected statusOK but got %v\n", resp.Status)
+	}
+
+	// Extract login cookies and set them in cookiejar
+	cookies = resp.Cookies()
+
+	url, err := url.Parse(serverUrl)
+	if err != nil {
+		log.Fatalf("Error parsing url; %v\n", err)
+	}
+	http.DefaultClient.Jar.SetCookies(url, cookies)
+
+	// Cache cookies
+	cookiesCache[user.Email] = cookies
 }
 
 // Cannot test ForgotPassword and ResetPassword handlers as they require

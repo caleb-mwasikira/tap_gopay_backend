@@ -1,10 +1,14 @@
 package utils
 
 import (
+	"fmt"
 	"log"
+	"math"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -67,4 +71,42 @@ func LoadDotenv() {
 			os.Setenv(key, value)
 		}
 	})
+}
+
+func ValidateAddress(address string) error {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return err
+	}
+
+	_, err = net.ResolveIPAddr("ip", host)
+	if err != nil {
+		return err
+	}
+
+	portNum, err := strconv.Atoi(port)
+	if err != nil {
+		return err
+	}
+
+	if portNum < 1 || portNum >= math.MaxUint16 {
+		return fmt.Errorf("port number is not within range 1 - %v", math.MaxUint16)
+	}
+	return nil
+}
+
+// Returns elements from items which predicate is true and
+// elements from items which predicate is false
+func Filter[T any](items []T, predicate func(item T) bool) ([]T, []T) {
+	meetsPredicate := []T{}
+	doesntMeetPredicate := []T{}
+
+	for _, item := range items {
+		if predicate(item) {
+			meetsPredicate = append(meetsPredicate, item)
+		} else {
+			doesntMeetPredicate = append(doesntMeetPredicate, item)
+		}
+	}
+	return meetsPredicate, doesntMeetPredicate
 }

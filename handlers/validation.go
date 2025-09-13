@@ -72,24 +72,24 @@ func validateStruct(obj any) error {
 					return err
 				}
 			}
-			if rule == "card_no" {
+			if rule == "wallet_address" {
 				str, _ := fieldValue.(string)
-				if err := validateCardNumber(str); err != nil {
+				if err := validateWalletAddress(str); err != nil {
 					return err
 				}
 			}
 			if rule == "account" {
 				str, _ := fieldValue.(string)
 
-				// Check if value is either a credit card number or phone number
-				err := validateCardNumber(str)
-				isCreditCardNumber := err == nil
+				// Check if value is either a wallet address or phone number
+				err := validateWalletAddress(str)
+				isWalletNumber := err == nil
 
 				err2 := validatePhoneNumber(str)
 				isPhoneNumber := err2 == nil
 
-				if !isCreditCardNumber && !isPhoneNumber {
-					return fmt.Errorf("%v must either be a credit card number or phone number", field.Name)
+				if !isWalletNumber && !isPhoneNumber {
+					return fmt.Errorf("%v must either be a wallet address or phone number", field.Name)
 				}
 			}
 			if rule == "amount" {
@@ -196,35 +196,33 @@ func isBase64Encoded(value string) bool {
 	return err == nil
 }
 
-// Credit card number will be in the format
+// Wallet address will be in the format
 //
 //	1234 5678 8765 5432 or 1234567887655432
-func validateCardNumber(cardNo string) error {
-	// TODO: Implement credit card_no validation using the Luhn algorithm
-
-	cardNo = strings.TrimSpace(cardNo)
-	if cardNo == "" {
-		return fmt.Errorf("credit card number cannot be empty")
+func validateWalletAddress(walletAddress string) error {
+	walletAddress = strings.TrimSpace(walletAddress)
+	if walletAddress == "" {
+		return fmt.Errorf("wallet address cannot be empty")
 	}
 
-	cardNo = strings.ReplaceAll(cardNo, " ", "")
+	walletAddress = strings.ReplaceAll(walletAddress, " ", "")
 
-	if len(cardNo) < MIN_CREDIT_CARD_LEN {
-		return fmt.Errorf("credit can number too short")
+	if len(walletAddress) < MIN_WALLET_ADDR_LEN {
+		return fmt.Errorf("wallet address number too short")
 	}
 
-	// Check that credit card number is made up of digits only
-	for _, char := range cardNo {
+	// Check that wallet address is made up of digits only
+	for _, char := range walletAddress {
 		isDigit := unicode.IsDigit(char)
 		if !isDigit {
-			return fmt.Errorf("credit card number must be made up of digits only")
+			return fmt.Errorf("wallet address must be made up of digits only")
 		}
 	}
 
 	return nil
 }
 
-// Used for setting spending limits on credit cards.
+// Used for setting spending limits on wallets.
 // Expects period value to be one of ['week', 'month', 'year']
 func validatePeriod(period string) error {
 	allowedPeriods := []string{"week", "month", "year"}

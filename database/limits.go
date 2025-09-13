@@ -7,10 +7,10 @@ import (
 	"log"
 )
 
-// Gets total amount spent on a credit card for the past week, month and year.
-func getTotalAmountSpent(cardNo string, period string) (float64, error) {
+// Gets total amount spent on a wallet for the past week, month and year.
+func getTotalAmountSpent(walletAddress string, period string) (float64, error) {
 	query := "CALL getTotalAmountSpent(?)"
-	rows, err := db.Query(query, cardNo)
+	rows, err := db.Query(query, walletAddress)
 	if err != nil {
 		return 0, err
 	}
@@ -36,14 +36,14 @@ func getTotalAmountSpent(cardNo string, period string) (float64, error) {
 	return 0, fmt.Errorf("period %v not found", period)
 }
 
-func IsWithinSpendingLimits(cardNo string, newAmount float64) bool {
+func IsWithinSpendingLimits(walletAddress string, newAmount float64) bool {
 	var (
 		period      string
 		limitAmount float64
 	)
 
-	query := "SELECT period, amount FROM limits WHERE card_no= ?"
-	row := db.QueryRow(query, cardNo)
+	query := "SELECT period, amount FROM limits WHERE wallet_address= ?"
+	row := db.QueryRow(query, walletAddress)
 	err := row.Scan(
 		&period,
 		&limitAmount,
@@ -58,7 +58,7 @@ func IsWithinSpendingLimits(cardNo string, newAmount float64) bool {
 		return false
 	}
 
-	amountSpent, err := getTotalAmountSpent(cardNo, period)
+	amountSpent, err := getTotalAmountSpent(walletAddress, period)
 	if err != nil {
 		log.Printf("Error fetching total amount spent; %v\n", err)
 		return false
@@ -68,14 +68,14 @@ func IsWithinSpendingLimits(cardNo string, newAmount float64) bool {
 	return withinLimits
 }
 
-func SetOrUpdateLimit(cardNo string, period string, amount float64) error {
+func SetOrUpdateLimit(walletAddress string, period string, amount float64) error {
 	query := `
-		INSERT INTO limits(card_no, period, amount)
+		INSERT INTO limits(wallet_address, period, amount)
 		VALUES(?, ?, ?)
 		ON DUPLICATE KEY UPDATE
 			period = VALUES(period),
 			amount = VALUES(amount);
 	`
-	_, err := db.Exec(query, cardNo, period, amount)
+	_, err := db.Exec(query, walletAddress, period, amount)
 	return err
 }

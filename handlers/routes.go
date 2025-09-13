@@ -22,20 +22,20 @@ func GetRoutes() *chi.Mux {
 			r.Use(RequireAuthMiddleware)
 
 			// Protected routes
-			r.Post("/new-credit-card", NewCreditCard)
-			r.Get("/credit-cards", GetAllCreditCards)
-			r.Get("/credit-cards/{card_no}", GetCreditCardDetails)
-			r.Post("/credit-cards/{card_no}/freeze", FreezeCreditCard)
-			r.Post("/credit-cards/{card_no}/activate", ActivateCreditCard)
-			r.Post("/credit-cards/{card_no}/limit", SetOrUpdateLimit)
+			r.Post("/new-wallet", CreateWallet)
+			r.Get("/wallets", GetAllWallets)
+			r.Get("/wallets/{wallet_address}", GetWalletDetails)
+			r.Post("/wallets/{wallet_address}/freeze", FreezeWallet)
+			r.Post("/wallets/{wallet_address}/activate", ActivateWallet)
+			r.Post("/wallets/{wallet_address}/limit", SetOrUpdateLimit)
 			r.Post("/transfer-funds", TransferFunds)
 			r.Post("/request-funds", RequestFunds)
-			r.Get("/recent-transactions/{card_no}", GetRecentTransactions)
+			r.Get("/recent-transactions/{wallet_address}", GetRecentTransactions)
 			r.Get("/transactions/{transaction_id}", GetTransaction)
 
 			// TODO: Implement require ownership middleware that checks if
-			// the credit card a user is requesting action on belongs to them.
-			// Affected routes */{card_no}/*
+			// the wallet a user is requesting action on belongs to them.
+			// Affected routes */{wallet_address}/*
 
 			r.Get("/verify-login", VerifyLogin)
 		})

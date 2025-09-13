@@ -61,35 +61,35 @@ func TestTransferFunds(t *testing.T) {
 	testServer := httptest.NewServer(r)
 	defer testServer.Close()
 
-	tommysCreditCard, err := getUsersCreditCard(
+	tommysWallet, err := getUsersWallet(
 		testServer.URL,
 		tommy,
-		func(cc database.CreditCard) bool {
-			return cc.IsActive
+		func(wallet database.Wallet) bool {
+			return wallet.IsActive
 		},
 	)
 	if err != nil {
-		t.Fatalf("Error fetching users credit card; %v\n", err)
+		t.Fatalf("Error fetching users wallet; %v\n", err)
 	}
 
-	leesCreditCard, err := getUsersCreditCard(
+	leesWallet, err := getUsersWallet(
 		testServer.URL,
 		lee,
-		func(cc database.CreditCard) bool {
-			return cc.IsActive
+		func(wallet database.Wallet) bool {
+			return wallet.IsActive
 		},
 	)
 	if err != nil {
-		t.Fatalf("Error fetching users credit card; %v\n", err)
+		t.Fatalf("Error fetching users wallet; %v\n", err)
 	}
 
-	// Test: Transfer funds from one credit card to another
+	// Test: Transfer funds from one wallet to another
 	requireLogin(tommy, testServer.URL)
 
 	resp, err := transferFunds(
 		testServer.URL,
-		tommysCreditCard.CardNo,
-		leesCreditCard.CardNo,
+		tommysWallet.Address,
+		leesWallet.Address,
 		fmt.Sprintf("%v.key", tommy.Email),
 		1,
 	)
@@ -103,8 +103,8 @@ func TestTransferFunds(t *testing.T) {
 	// Test: Transfer funds from one phone number to another
 	resp, err = transferFunds(
 		testServer.URL,
-		tommysCreditCard.PhoneNo,
-		leesCreditCard.PhoneNo,
+		tommysWallet.PhoneNo,
+		leesWallet.PhoneNo,
 		fmt.Sprintf("%v.key", tommy.Email),
 		1,
 	)
@@ -116,8 +116,8 @@ func TestTransferFunds(t *testing.T) {
 	expectStatus(t, resp, http.StatusOK)
 }
 
-func getTransactions(serverUrl, cardNo string) ([]database.Transaction, error) {
-	resp, err := http.Get(serverUrl + fmt.Sprintf("/recent-transactions/%v", cardNo))
+func getTransactions(serverUrl, walletAddress string) ([]database.Transaction, error) {
+	resp, err := http.Get(serverUrl + fmt.Sprintf("/recent-transactions/%v", walletAddress))
 	if err != nil {
 		return nil, err
 	}
@@ -133,18 +133,18 @@ func TestGetRecentTransactions(t *testing.T) {
 	testServer := httptest.NewServer(r)
 	defer testServer.Close()
 
-	// Fetch one of tommy's credit cards
-	tommysCreditCard, err := getUsersCreditCard(testServer.URL, tommy, nil)
+	// Fetch one of tommy's wallets
+	tommysWallet, err := getUsersWallet(testServer.URL, tommy, nil)
 	if err != nil {
-		t.Fatalf("Error fetching user's credit card; %v\n", err)
+		t.Fatalf("Error fetching user's wallet; %v\n", err)
 	}
 
-	// Get all transactions made by that credit card
+	// Get all transactions made by that wallet
 	requireLogin(tommy, testServer.URL)
 
-	_, err = getTransactions(testServer.URL, tommysCreditCard.CardNo)
+	_, err = getTransactions(testServer.URL, tommysWallet.Address)
 	if err != nil {
-		t.Errorf("Error fetching credit card transactions; %v\n", err)
+		t.Errorf("Error fetching wallet transactions; %v\n", err)
 	}
 }
 
@@ -154,16 +154,16 @@ func TestGetTransaction(t *testing.T) {
 
 	requireLogin(tommy, testServer.URL)
 
-	// Fetch one of tommy's credit card
-	tommysCreditCard, err := getUsersCreditCard(testServer.URL, tommy, nil)
+	// Fetch one of tommy's wallet
+	tommysWallet, err := getUsersWallet(testServer.URL, tommy, nil)
 	if err != nil {
-		t.Fatalf("Error fetching user's credit card; %v\n", err)
+		t.Fatalf("Error fetching user's wallet; %v\n", err)
 	}
 
-	// Get all transactions made by tommy's credit card
-	transactions, err := getTransactions(testServer.URL, tommysCreditCard.CardNo)
+	// Get all transactions made by tommy's wallet
+	transactions, err := getTransactions(testServer.URL, tommysWallet.Address)
 	if err != nil {
-		t.Fatalf("Error fetching credit card transactions; %v\n", err)
+		t.Fatalf("Error fetching wallet transactions; %v\n", err)
 	}
 
 	// Fetch one transaction

@@ -13,7 +13,7 @@ const (
 
 type Account struct {
 	Username string `json:"username"`
-	CardNo   string `json:"card_no"`
+	Address  string `json:"wallet_address"`
 	PhoneNo  string `json:"phone_no"`
 }
 
@@ -102,10 +102,10 @@ func GetTransaction(transactionId string) (*Transaction, error) {
 			transaction_id,
 			senders_username,
 			senders_phone,
-			senders_card_no,
+			senders_wallet_address,
 			receivers_username,
 			receivers_phone,
-			receivers_card_no,
+			receivers_wallet_address,
 			amount,
 			timestamp,
 			signature,
@@ -119,10 +119,10 @@ func GetTransaction(transactionId string) (*Transaction, error) {
 		&t.TransactionId,
 		&sender.Username,
 		&sender.PhoneNo,
-		&sender.CardNo,
+		&sender.Address,
 		&receiver.Username,
 		&receiver.PhoneNo,
-		&receiver.CardNo,
+		&receiver.Address,
 		&t.Amount,
 		&t.Timestamp,
 		&t.Signature,
@@ -138,26 +138,26 @@ func GetTransaction(transactionId string) (*Transaction, error) {
 	return &t, nil
 }
 
-func GetRecentTransactions(sendersCardNo string) ([]*Transaction, error) {
+func GetRecentTransactions(sendersAddress string) ([]*Transaction, error) {
 	query := `
 		SELECT
 			transaction_id,
 			senders_username,
 			senders_phone,
-			senders_card_no,
+			senders_wallet_address,
 			receivers_username,
 			receivers_phone,
-			receivers_card_no,
+			receivers_wallet_address,
 			amount,
 			timestamp,
 			signature,
 			public_key_id,
 			created_at
 		FROM transaction_details
-		WHERE senders_card_no= ?
+		WHERE senders_wallet_address= ?
 		LIMIT 50
 	`
-	rows, err := db.Query(query, sendersCardNo)
+	rows, err := db.Query(query, sendersAddress)
 	if err != nil {
 		return nil, err
 	}
@@ -171,10 +171,10 @@ func GetRecentTransactions(sendersCardNo string) ([]*Transaction, error) {
 			&t.TransactionId,
 			&t.Sender.Username,
 			&t.Sender.PhoneNo,
-			&t.Sender.CardNo,
+			&t.Sender.Address,
 			&t.Receiver.Username,
 			&t.Receiver.PhoneNo,
-			&t.Receiver.CardNo,
+			&t.Receiver.Address,
 			&t.Amount,
 			&t.Timestamp,
 			&t.Signature,

@@ -1,13 +1,11 @@
+-- --------------------------------------------------------
 --
 -- Table structure for table `password_reset_tokens`
 --
-DROP TABLE IF EXISTS `password_reset_tokens`;
-
-CREATE TABLE IF NOT EXISTS `password_reset_tokens` (
-  `id` INT NOT NULL AUTO_INCREMENT,
-  `email` VARCHAR(255) NOT NULL,
-  `token` VARCHAR(255) NOT NULL UNIQUE,
-  `expires_at` DATETIME NOT NULL,
-  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`)
-);
+CREATE TABLE `password_reset_tokens` (
+  `id` bigint NOT NULL,
+  `email` varchar(255) NOT NULL,
+  `token` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `expires_at` datetime NOT NULL
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci;

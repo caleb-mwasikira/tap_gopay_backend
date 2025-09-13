@@ -20,9 +20,9 @@ func TestSetOrUpdateLimit(t *testing.T) {
 
 	requireLogin(tommy, testServer.URL)
 
-	// Create new credit card, so we can max out its limits
+	// Create new wallet, so we can max out its limits
 	resp, err := http.Post(
-		testServer.URL+"/new-credit-card", jsonContentType, nil,
+		testServer.URL+"/new-wallet", jsonContentType, nil,
 	)
 	if err != nil {
 		t.Fatalf("Error making request; %v\n", err)
@@ -31,13 +31,13 @@ func TestSetOrUpdateLimit(t *testing.T) {
 	body := expectStatus(t, resp, http.StatusOK)
 	resp.Body.Close()
 
-	var tommysCreditCard database.CreditCard
-	err = json.Unmarshal(body, &tommysCreditCard)
+	var tommysWallet database.Wallet
+	err = json.Unmarshal(body, &tommysWallet)
 	if err != nil {
-		t.Fatal("Expected credit card data type but got garbage data")
+		t.Fatal("Expected wallet data type but got garbage data")
 	}
 
-	// Setup a limit on tommy's credit card
+	// Setup a limit on tommy's wallet
 	const limit = 10.0
 
 	req := handlers.SetupLimitRequest{
@@ -50,7 +50,7 @@ func TestSetOrUpdateLimit(t *testing.T) {
 	}
 
 	resp, err = http.Post(
-		testServer.URL+fmt.Sprintf("/credit-cards/%v/limit", tommysCreditCard.CardNo),
+		testServer.URL+fmt.Sprintf("/wallets/%v/limit", tommysWallet.Address),
 		jsonContentType,
 		bytes.NewBuffer(body),
 	)
@@ -61,16 +61,16 @@ func TestSetOrUpdateLimit(t *testing.T) {
 	expectStatus(t, resp, http.StatusOK)
 	resp.Body.Close()
 
-	// Get one-of lee's credit cards
-	leesCreditCard, err := getUsersCreditCard(
+	// Get one-of lee's wallets
+	leesWallet, err := getUsersWallet(
 		testServer.URL,
 		lee,
-		func(cc database.CreditCard) bool {
-			return cc.IsActive
+		func(wallet database.Wallet) bool {
+			return wallet.IsActive
 		},
 	)
 	if err != nil {
-		t.Fatalf("Error fetching user's credit cards; %v\n", err)
+		t.Fatalf("Error fetching user's wallets; %v\n", err)
 	}
 
 	// Test spending limit worked by sending amount > limit
@@ -78,8 +78,8 @@ func TestSetOrUpdateLimit(t *testing.T) {
 
 	resp, err = transferFunds(
 		testServer.URL,
-		tommysCreditCard.CardNo,
-		leesCreditCard.CardNo,
+		tommysWallet.Address,
+		leesWallet.Address,
 		fmt.Sprintf("%v.key", tommy.Email),
 		limit*2,
 	)
@@ -98,8 +98,8 @@ func TestSetOrUpdateLimit(t *testing.T) {
 
 		resp, err = transferFunds(
 			testServer.URL,
-			tommysCreditCard.CardNo,
-			leesCreditCard.CardNo,
+			tommysWallet.Address,
+			leesWallet.Address,
 			fmt.Sprintf("%v.key", tommy.Email),
 			float64(amount),
 		)

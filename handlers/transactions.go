@@ -45,22 +45,22 @@ func (req TransactionRequest) Hash() []byte {
 	return h[:]
 }
 
-func getCreditCardOwnedBy(phone string) (*database.CreditCard, error) {
-	creditCards, err := database.GetAllCreditCardsOwnedBy(
+func getWalletOwnedBy(phone string) (*database.Wallet, error) {
+	wallets, err := database.GetAllWalletsOwnedBy(
 		phone,
-		func(cc *database.CreditCard) bool {
-			return cc.IsActive
+		func(wallet *database.Wallet) bool {
+			return wallet.IsActive
 		},
 	)
 	if err != nil {
-		return nil, fmt.Errorf("error fetching credit cards owned by phone number; %v", err)
+		return nil, fmt.Errorf("error fetching wallets owned by phone number; %v", err)
 	}
 
-	if len(creditCards) == 0 {
-		return nil, fmt.Errorf("no credit cards found owned by phone number")
+	if len(wallets) == 0 {
+		return nil, fmt.Errorf("no wallets found owned by phone number")
 	}
 
-	return creditCards[0], nil
+	return wallets[0], nil
 }
 
 func verifySignature(pubKeyBytes []byte, data []byte, b64EncodedSignature string) error {
@@ -108,21 +108,21 @@ func TransferFunds(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if isValidPhoneNumber(req.Sender) {
-		creditCard, err := getCreditCardOwnedBy(req.Sender)
+		wallet, err := getWalletOwnedBy(req.Sender)
 		if err != nil {
-			api.Errorf(w, "Sender has no active credit card accounts", err)
+			api.Errorf(w, "Sender has no active wallet accounts", err)
 			return
 		}
-		req.Sender = creditCard.CardNo
+		req.Sender = wallet.Address
 	}
 
 	if isValidPhoneNumber(req.Receiver) {
-		creditCard, err := getCreditCardOwnedBy(req.Receiver)
+		wallet, err := getWalletOwnedBy(req.Receiver)
 		if err != nil {
-			api.Errorf(w, "Receiver has no active credit card accounts", err)
+			api.Errorf(w, "Receiver has no active wallet accounts", err)
 			return
 		}
-		req.Receiver = creditCard.CardNo
+		req.Receiver = wallet.Address
 	}
 
 	if req.Sender == req.Receiver {
@@ -133,7 +133,7 @@ func TransferFunds(w http.ResponseWriter, r *http.Request) {
 	// Check amount is within spending limits
 	ok = database.IsWithinSpendingLimits(req.Sender, req.Amount)
 	if !ok {
-		api.Conflict(w, "Credit card exceeded spending limits")
+		api.Conflict(w, "Wallet exceeded spending limits")
 		return
 	}
 
@@ -214,15 +214,15 @@ func GetTransaction(w http.ResponseWriter, r *http.Request) {
 }
 
 func GetRecentTransactions(w http.ResponseWriter, r *http.Request) {
-	cardNo := chi.URLParam(r, "card_no")
-	if err := validateCardNumber(cardNo); err != nil {
+	walletAddress := chi.URLParam(r, "wallet_address")
+	if err := validateWalletAddress(walletAddress); err != nil {
 		api.BadRequest(w, err.Error())
 		return
 	}
 
-	transactions, err := database.GetRecentTransactions(cardNo)
+	transactions, err := database.GetRecentTransactions(walletAddress)
 	if err != nil {
-		api.Errorf(w, "Error fetching credit card transactions", err)
+		api.Errorf(w, "Error fetching wallet transactions", err)
 		return
 	}
 

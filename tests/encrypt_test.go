@@ -11,18 +11,13 @@ import (
 )
 
 // Reads private key from file.
-// If reading private key fails and a seed phrase is provided,
-// the func generates a new private key using provided seed phrase,
-// saving it (private key) to the same file.
-func getPrivateKey(path string, seedPhrase []byte) (*ecdsa.PrivateKey, error) {
+// If reading private key fails the func generates a new private key
+// using provided seed phrase.
+// The private key is saved to the same file that was to be read.
+func getOrGeneratePrivateKey(path string, seedPhrase []byte) (*ecdsa.PrivateKey, error) {
 	privateKey, err := encrypt.LoadPrivateKeyFromFile(path)
 	if err == nil {
 		return privateKey, nil
-	}
-
-	if len(seedPhrase) == 0 {
-		// No seed phrase material to generate a new private key
-		return nil, err
 	}
 
 	reader := bytes.NewBuffer(seedPhrase)

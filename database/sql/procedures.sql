@@ -1,17 +1,15 @@
-DELIMITER $$
+--
+-- getTotalAmountSpent
+--
 
--- Gets a summary of all transactions carried out on a credit card
--- for the past 7 days, 1 month and 1 year.
--- This procedure is going to be used to set limits on the amount
--- of spending allowed on a credit card.
-CREATE PROCEDURE getTotalAmountSpent(IN p_card_no VARCHAR(32))
+CREATE PROCEDURE `getTotalAmountSpent`(IN `p_wallet_address` VARCHAR(32))
 BEGIN
     -- Last 7 days
     SELECT
         'week' AS period,
         COALESCE(SUM(amount), 0) AS total_amount
     FROM transactions
-    WHERE sender = p_card_no
+    WHERE sender = p_wallet_address
       AND created_at >= NOW() - INTERVAL 7 DAY
 
     UNION ALL
@@ -21,7 +19,7 @@ BEGIN
         'month' AS period,
         COALESCE(SUM(amount), 0) AS total_amount
     FROM transactions
-    WHERE sender = p_card_no
+    WHERE sender = p_wallet_address
       AND created_at >= NOW() - INTERVAL 1 MONTH
 
     UNION ALL
@@ -31,8 +29,47 @@ BEGIN
         'year' AS period,
         COALESCE(SUM(amount), 0) AS total_amount
     FROM transactions
-    WHERE sender = p_card_no
+    WHERE sender = p_wallet_address
       AND created_at >= NOW() - INTERVAL 1 YEAR;
-END$$
+END;
 
-DELIMITER ;
+
+--
+-- getWalletBalance
+--
+
+CREATE PROCEDURE `getWalletBalance`(IN `p_wallet_address` VARCHAR(255), OUT `account_balance` DECIMAL(10,2))
+BEGIN
+	DECLARE var_initial_deposit DECIMAL(10,2);
+    DECLARE amount_sent DECIMAL(10,2);
+    DECLARE amount_received DECIMAL(10,2);
+
+	-- Check if wallet exists
+    IF NOT EXISTS(SELECT 1 FROM wallets WHERE wallet_address = p_wallet_address) THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = "Wallet does not exist";
+    END IF;
+
+    -- Get total amount sent by wallet
+    SELECT
+        COALESCE(SUM(amount), 0)
+    INTO amount_sent
+    FROM transactions
+    WHERE sender = p_wallet_address;
+
+	-- Get total amount received by wallet
+    SELECT
+        COALESCE(SUM(amount), 0)
+    INTO amount_received
+    FROM transactions
+    WHERE receiver = p_wallet_address;
+
+    -- Get wallets initial deposit
+    SELECT initial_deposit
+    INTO var_initial_deposit
+    FROM wallets
+    WHERE wallet_address = p_wallet_address;
+
+    -- Calculate the current balance
+    SET account_balance = var_initial_deposit + amount_received - amount_sent;
+END;
