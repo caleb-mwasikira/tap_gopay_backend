@@ -25,6 +25,18 @@ func CreateWallet(userId int, walletAddress string, amount float64) (*Wallet, er
 	return GetWalletDetails(userId, walletAddress)
 }
 
+func WalletExists(userId int, walletAddress string) bool {
+	var exists bool
+	query := "SELECT EXISTS(SELECT 1 FROM wallets WHERE user_id= ? AND wallet_address= ?)"
+
+	row := db.QueryRow(query, userId, walletAddress)
+	err := row.Scan(&exists)
+	if err != nil {
+		return false
+	}
+	return exists
+}
+
 func GetWalletDetails(userId int, walletAddress string) (*Wallet, error) {
 	wallet := Wallet{
 		UserId:  userId,

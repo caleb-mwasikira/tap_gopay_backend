@@ -68,14 +68,14 @@ func IsWithinSpendingLimits(walletAddress string, newAmount float64) bool {
 	return withinLimits
 }
 
-func SetOrUpdateLimit(walletAddress string, period string, amount float64) error {
+func SetOrUpdateLimit(userId int, walletAddress string, period string, amount float64) error {
 	query := `
-		INSERT INTO limits(wallet_address, period, amount)
-		VALUES(?, ?, ?)
+		INSERT INTO limits(user_id, wallet_address, period, amount)
+		VALUES(?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE
 			period = VALUES(period),
 			amount = VALUES(amount);
 	`
-	_, err := db.Exec(query, walletAddress, period, amount)
+	_, err := db.Exec(query, userId, walletAddress, period, amount)
 	return err
 }

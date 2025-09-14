@@ -19,11 +19,10 @@ func GetRoutes() *chi.Mux {
 		r.Post("/auth/reset-password", ResetPassword)
 
 		r.Group(func(r chi.Router) {
+			// Protected routes
 			r.Use(RequireAuthMiddleware)
 
 			r.HandleFunc("/ws-notifications", wsNotifyReceivedFunds)
-
-			// Protected routes
 			r.Post("/new-wallet", CreateWallet)
 			r.Get("/wallets", GetAllWallets)
 			r.Get("/wallets/{wallet_address}", GetWalletDetails)
@@ -34,11 +33,6 @@ func GetRoutes() *chi.Mux {
 			r.Post("/request-funds", RequestFunds)
 			r.Get("/recent-transactions/{wallet_address}", GetRecentTransactions)
 			r.Get("/transactions/{transaction_id}", GetTransaction)
-
-			// TODO: Implement require ownership middleware that checks if
-			// the wallet a user is requesting action on belongs to them.
-			// Affected routes */{wallet_address}/*
-
 			r.Get("/verify-login", VerifyLogin)
 		})
 	})
