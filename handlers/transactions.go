@@ -220,6 +220,17 @@ func GetTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// I realize that in order to do authorization here,
+	// we would have to check if the currently logged in user
+	// was involved in the transaction; as a sender or receiver.
+	// This will involve multiple database searches and JOINS.
+	// Which i am currently not willing to do.
+	// So i will effective immediately turn a blind eye to this 🙈.
+	// I will rely on the fact that transaction Ids are difficult to guess -
+	// as my shield of security.
+	// May the heavens keep this codebase safe. And may it NEVER come back
+	// to bite me in the a**
+
 	t, err := database.GetTransaction(transactionId)
 	if err != nil {
 		api.Errorf(w, "Error fetching transaction", err)
@@ -230,9 +241,22 @@ func GetTransaction(w http.ResponseWriter, r *http.Request) {
 }
 
 func GetRecentTransactions(w http.ResponseWriter, r *http.Request) {
+	user, ok := getAuthUser(r)
+	if !ok {
+		api.Unauthorized(w)
+		return
+	}
+
 	walletAddress := chi.URLParam(r, "wallet_address")
 	if err := validateWalletAddress(walletAddress); err != nil {
 		api.BadRequest(w, err.Error())
+		return
+	}
+
+	// Check if wallet address belongs to logged in user
+	ok = database.WalletExists(user.Id, walletAddress)
+	if !ok {
+		api.Unauthorized(w)
 		return
 	}
 

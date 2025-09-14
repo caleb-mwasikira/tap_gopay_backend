@@ -145,6 +145,12 @@ type SetupLimitRequest struct {
 }
 
 func SetOrUpdateLimit(w http.ResponseWriter, r *http.Request) {
+	user, ok := getAuthUser(r)
+	if !ok {
+		api.Unauthorized(w)
+		return
+	}
+
 	walletAddress := chi.URLParam(r, "wallet_address")
 	if err := validateWalletAddress(walletAddress); err != nil {
 		api.BadRequest(w, err.Error())
@@ -164,9 +170,9 @@ func SetOrUpdateLimit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = database.SetOrUpdateLimit(walletAddress, req.Period, req.Amount)
+	err = database.SetOrUpdateLimit(user.Id, walletAddress, req.Period, req.Amount)
 	if err != nil {
-		api.Errorf(w, "Error setting or updating spending limits", err)
+		api.Errorf(w, "Error setting spending limits", err)
 		return
 	}
 
