@@ -12,13 +12,17 @@ import (
 )
 
 var (
-	address string = "127.0.0.1:5000"
-	migrate bool
+	address       string = "127.0.0.1:5000"
+	migrate       bool
+	mysqlUser     string
+	mysqlPassword string
 )
 
 func init() {
 	flag.StringVar(&address, "address", address, "IP address to run the server on")
 	flag.BoolVar(&migrate, "migrate", false, "Run migration.")
+	flag.StringVar(&mysqlUser, "mysql-user", "", "MySQL user to run migration")
+	flag.StringVar(&mysqlPassword, "mysql-pass", "", "MySQL password to run migration")
 	flag.Parse()
 
 	if err := utils.ValidateAddress(address); err != nil {
@@ -28,7 +32,7 @@ func init() {
 
 func main() {
 	if migrate {
-		err := database.MigrateDatabase()
+		err := database.MigrateDatabase(mysqlUser, mysqlPassword)
 		if err != nil {
 			log.Fatalf("Error migrating database; %v\n", err)
 		}

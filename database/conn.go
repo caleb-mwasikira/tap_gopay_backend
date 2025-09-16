@@ -64,13 +64,14 @@ func openDbConn(config mysql.Config) (*sql.DB, error) {
 //go:embed sql/*
 var sqlDir embed.FS
 
-func MigrateDatabase() error {
+// Requires root privileges
+func MigrateDatabase(rootUser, rootPassword string) error {
 	utils.LoadDotenv()
 
 	// Create database connection
 	config := mysql.Config{
-		User:                 os.Getenv("MYSQL_USER"),
-		Passwd:               os.Getenv("MYSQL_PASSWORD"),
+		User:                 rootUser,
+		Passwd:               rootPassword,
 		DBName:               os.Getenv("MYSQL_DBNAME"),
 		AllowNativePasswords: true,
 		MultiStatements:      true,
@@ -116,7 +117,7 @@ func MigrateDatabase() error {
 	}
 
 	// Execute these files last as they contain FOREIGN KEY constraints
-	last := []string{"extra.sql", "procedures.sql"}
+	last := []string{"extra.sql", "routines.sql"}
 
 	lastFiles, files := utils.Filter(files, func(file fs.DirEntry) bool {
 		placeLast := strings.HasPrefix(file.Name(), "view_") || slices.Contains(last, file.Name())

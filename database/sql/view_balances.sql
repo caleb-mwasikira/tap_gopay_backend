@@ -1,8 +1,9 @@
--- --------------------------------------------------------
---
--- Structure for view `balances`
---
-CREATE VIEW `balances` AS
+DROP TABLE IF EXISTS `balances`;
+
+DROP VIEW IF EXISTS `balances`;
+
+CREATE VIEW
+    `balances` AS
 SELECT
     `wallets`.`wallet_address` AS `wallet_address`,
     coalesce(
@@ -57,19 +58,19 @@ FROM
     (
         (
             (
-                select
-                    distinct `wallets`.`wallet_address` AS `wallet_address`
+                select distinct
+                    `wallets`.`wallet_address` AS `wallet_address`
                 from
                     `wallets`
             ) `wallets`
-            left join `transactions` `t` on(
+            left join `transactions` `t` on (
                 (
                     (`t`.`sender` = `wallets`.`wallet_address`)
                     or (`t`.`receiver` = `wallets`.`wallet_address`)
                 )
             )
         )
-        left join `wallets` `wallet` on(
+        left join `wallets` `wallet` on (
             (
                 `wallet`.`wallet_address` = `wallets`.`wallet_address`
             )
