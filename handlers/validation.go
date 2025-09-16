@@ -98,6 +98,12 @@ func validateStruct(obj any) error {
 					return err
 				}
 			}
+			if rule == "public_key_hash" {
+				str, _ := fieldValue.(string)
+				if !isBase64Encoded(str) {
+					return errors.New("public_key_hash must be base64-encoded")
+				}
+			}
 			if rule == "signature" {
 				str, _ := fieldValue.(string)
 				if !isBase64Encoded(str) {
@@ -105,7 +111,7 @@ func validateStruct(obj any) error {
 				}
 			}
 			if rule == "public_key" {
-				data, _ := fieldValue.([]byte)
+				data, _ := fieldValue.(string)
 				if err := validatePublicKey(data); err != nil {
 					return err
 				}
@@ -179,8 +185,13 @@ func validatePhoneNumber(phone string) error {
 }
 
 // Right now this only supports ecdsa public keys
-func validatePublicKey(pubKeyBytes []byte) error {
-	_, err := encrypt.LoadPublicKeyFromBytes(pubKeyBytes)
+func validatePublicKey(pubKey string) error {
+	pubKeyBytes, err := base64.StdEncoding.DecodeString(pubKey)
+	if err != nil {
+		return err
+	}
+
+	_, err = encrypt.LoadPublicKeyFromBytes(pubKeyBytes)
 	return err
 }
 
@@ -192,6 +203,10 @@ func validateAmount(amount float64) error {
 }
 
 func isBase64Encoded(value string) bool {
+	if isEmpty(value) {
+		return false
+	}
+
 	_, err := base64.StdEncoding.DecodeString(value)
 	return err == nil
 }

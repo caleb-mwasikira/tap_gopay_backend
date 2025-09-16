@@ -4,7 +4,6 @@ import (
 	"crypto/ecdsa"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -23,9 +22,10 @@ type TransactionRequest struct {
 	Amount    float64 `json:"amount" validate:"amount"`
 	Timestamp string  `json:"timestamp"` // Time when transaction was initiated by the client
 
-	// Base64 encoded signature
-	// Request signed by sender
-	Signature string `json:"signature" validate:"signature"`
+	// Base64 encoded hash of public key
+	// that should be used to verify signature
+	PublicKeyHash string `json:"public_key_hash" validate:"public_key_hash"`
+	Signature     string `json:"signature" validate:"signature"` // Base64 encoded signature
 }
 
 func (req TransactionRequest) Hash() []byte {
@@ -85,24 +85,31 @@ func verifySignature(pubKeyBytes []byte, data []byte, b64EncodedSignature string
 func TransferFunds(w http.ResponseWriter, r *http.Request) {
 	user, ok := getAuthUser(r)
 	if !ok {
-		api.Unauthorized(w)
+		api.Unauthorized(w, "Access to this route requires user login")
 		return
 	}
 
 	var req TransactionRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		api.BadRequest(w, "sender, receiver, amount, timestamp and signature fields required")
+		api.BadRequest(w, "Error parsing request body", err)
 		return
 	}
 
 	if err := validateStruct(req); err != nil {
-		api.BadRequest(w, err.Error())
+		api.BadRequest(w, err.Error(), nil)
+		return
+	}
+
+	// Get user's public key used to sign the transaction
+	pubKeyBytes, err := database.GetPublicKey(user.Email, req.PublicKeyHash)
+	if err != nil {
+		api.Errorf(w, "Error sending funds. Public key not found", err)
 		return
 	}
 
 	data := req.Hash()
-	err = verifySignature(user.PublicKey, data, req.Signature)
+	err = verifySignature(pubKeyBytes, data, req.Signature)
 	if err != nil {
 		api.Errorf(w, "Error sending funds. Signature verification failed", err)
 		return
@@ -127,7 +134,7 @@ func TransferFunds(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Sender == req.Receiver {
-		api.BadRequest(w, "Sender and receiver share the same account")
+		api.BadRequest(w, "Sender and receiver share the same account", nil)
 		return
 	}
 
@@ -138,12 +145,10 @@ func TransferFunds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pubKeyId := sha256.Sum256(user.PublicKey)
-
 	transaction, err := database.CreateTransaction(
 		req.Sender, req.Receiver, req.Amount,
 		req.Timestamp, req.Signature,
-		hex.EncodeToString(pubKeyId[:]),
+		req.PublicKeyHash,
 	)
 	if err != nil {
 		api.Errorf(w, "Error transferring funds", err)
@@ -172,36 +177,40 @@ func TransferFunds(w http.ResponseWriter, r *http.Request) {
 func RequestFunds(w http.ResponseWriter, r *http.Request) {
 	user, ok := getAuthUser(r)
 	if !ok {
-		api.Unauthorized(w)
+		api.Unauthorized(w, "Access to this route requires user login")
 		return
 	}
 
 	var req TransactionRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		api.BadRequest(w, "sender, receiver, amount and signature fields required")
+		api.BadRequest(w, "Error parsing request body", err)
 		return
 	}
 
 	if err := validateStruct(req); err != nil {
-		api.BadRequest(w, err.Error())
+		api.BadRequest(w, err.Error(), nil)
+		return
+	}
+
+	// Get user's public key used to sign the transaction
+	pubKeyBytes, err := database.GetPublicKey(user.Email, req.PublicKeyHash)
+	if err != nil {
+		api.Errorf(w, "Error sending funds. Public key not found", err)
 		return
 	}
 
 	data := req.Hash()
-	err = verifySignature(user.PublicKey, data, req.Signature)
+	err = verifySignature(pubKeyBytes, data, req.Signature)
 	if err != nil {
 		api.Errorf(w, "Error requesting funds. Signature verification failed", nil)
 		return
 	}
 
-	// Add record to database
-	pubKeyId := sha256.Sum256(user.PublicKey)
-
 	transaction, err := database.CreateRequestFunds(
 		req.Sender, req.Receiver, req.Amount,
 		req.Timestamp, req.Signature,
-		hex.EncodeToString(pubKeyId[:]),
+		req.PublicKeyHash,
 	)
 	if err != nil {
 		api.Errorf(w, "Error requesting funds", err)
@@ -216,7 +225,7 @@ func GetTransaction(w http.ResponseWriter, r *http.Request) {
 	transactionId = strings.TrimSpace(transactionId)
 
 	if len(transactionId) < database.TRANSACTION_ID_LEN {
-		api.BadRequest(w, "Invalid transaction id")
+		api.BadRequest(w, "Invalid transaction id", nil)
 		return
 	}
 
@@ -243,20 +252,20 @@ func GetTransaction(w http.ResponseWriter, r *http.Request) {
 func GetRecentTransactions(w http.ResponseWriter, r *http.Request) {
 	user, ok := getAuthUser(r)
 	if !ok {
-		api.Unauthorized(w)
+		api.Unauthorized(w, "Access to this route requires user login")
 		return
 	}
 
 	walletAddress := chi.URLParam(r, "wallet_address")
 	if err := validateWalletAddress(walletAddress); err != nil {
-		api.BadRequest(w, err.Error())
+		api.BadRequest(w, err.Error(), nil)
 		return
 	}
 
 	// Check if wallet address belongs to logged in user
 	ok = database.WalletExists(user.Id, walletAddress)
 	if !ok {
-		api.Unauthorized(w)
+		api.Unauthorized(w, "Access to this route requires user login")
 		return
 	}
 

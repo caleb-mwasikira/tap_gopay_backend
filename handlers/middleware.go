@@ -22,7 +22,7 @@ func RequireAndroidApiKeyMiddleware(next http.Handler) http.Handler {
 		authHeader := r.Header.Get("Authorization")
 		fields := strings.Split(authHeader, " ")
 		if len(fields) != 2 {
-			api.BadRequest(w, "Invalid Authorization header format")
+			api.BadRequest(w, "Invalid Authorization header format", nil)
 			return
 		}
 
@@ -30,12 +30,12 @@ func RequireAndroidApiKeyMiddleware(next http.Handler) http.Handler {
 		b64EncodedData := fields[1]
 		androidApiKey, err := base64.StdEncoding.DecodeString(b64EncodedData)
 		if err != nil {
-			api.BadRequest(w, "Invalid Authorization value. Expected base64-encoded string")
+			api.BadRequest(w, "Invalid Authorization value. Expected base64-encoded string", nil)
 			return
 		}
 
 		if ANDROID_API_KEY != string(androidApiKey) {
-			api.Unauthorized(w)
+			api.Unauthorized(w, "Invalid ANDROID_API_KEY in Authorization headers")
 			return
 		}
 
@@ -70,7 +70,7 @@ func RequireAuthMiddleware(next http.Handler) http.Handler {
 		headerAccessToken, err2 := getAccessTokenFromHeaders(r)
 
 		if err != nil && err2 != nil {
-			api.Unauthorized2(w, "Access to this route requires user login")
+			api.Unauthorized(w, "Access to this route requires user login")
 			return
 		}
 
@@ -84,7 +84,7 @@ func RequireAuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		api.Unauthorized2(w, "Access to this route requires user login")
+		api.Unauthorized(w, "Access to this route requires user login")
 	})
 }
 

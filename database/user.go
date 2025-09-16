@@ -1,38 +1,67 @@
 package database
 
+import (
+	"golang.org/x/crypto/bcrypt"
+)
+
 type User struct {
 	Id            int    `json:"id"`
 	Username      string `json:"username"`
 	Email         string `json:"email"`
+	Password      string `json:"password"`
 	PhoneNo       string `json:"phone_no"`
 	EmailVerified bool   `json:"email_verified"`
-	PublicKey     []byte `json:"public_key"`
 }
 
+func hashPassword(password string) (string, error) {
+	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	return string(hashed), err
+}
+
+// Inserts a new user into the database and saves
+// their registered public key.
+// You can pass in password in plaintext, the function
+// hashes the password for you.
 func CreateUser(
-	username, email, phoneNo string,
-	pubKey []byte,
+	username,
+	email,
+	password,
+	phoneNo,
+	b64EncodedPubKey string,
 ) error {
+	hashedPassword, err := hashPassword(password)
+	if err != nil {
+		return err
+	}
+
 	query := `
 		INSERT INTO users(
-			username, email, phone_no, public_key
+			username,
+			email,
+			password,
+			phone_no
 		)
 		VALUES(?, ?, ?, ?)
 	`
-	_, err := db.Exec(
+	_, err = db.Exec(
 		query,
 		username,
 		email,
+		hashedPassword,
 		phoneNo,
-		pubKey,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Save public key in database
+	return CreatePublicKey(email, b64EncodedPubKey)
 }
 
 // Fetches user by their email
 func GetUser(email string) (*User, error) {
 	query := `
-		SELECT id, username, email, phone_no, public_key
+		SELECT id, username, email, password, phone_no
 		FROM users WHERE email = ?
 	`
 	row := db.QueryRow(query, email)
@@ -42,8 +71,8 @@ func GetUser(email string) (*User, error) {
 		&user.Id,
 		&user.Username,
 		&user.Email,
+		&user.Password,
 		&user.PhoneNo,
-		&user.PublicKey,
 	)
 	if err != nil {
 		return nil, err
@@ -61,8 +90,13 @@ func UserExists(email string) bool {
 	return exists
 }
 
-func ChangePublicKey(email string, pubKeyBytes []byte) error {
-	query := "UPDATE users SET public_key= ? WHERE email= ?"
-	_, err := db.Exec(query, pubKeyBytes, email)
+func ChangePassword(email, password string) error {
+	hashedPassword, err := hashPassword(password)
+	if err != nil {
+		return err
+	}
+
+	query := "UPDATE users SET password= ? WHERE email= ?"
+	_, err = db.Exec(query, hashedPassword, email)
 	return err
 }

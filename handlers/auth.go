@@ -1,71 +1,39 @@
 package handlers
 
 import (
-	"crypto/ecdsa"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"time"
 
 	"github.com/caleb-mwasikira/tap_gopay_backend/api"
 	"github.com/caleb-mwasikira/tap_gopay_backend/database"
-	"github.com/caleb-mwasikira/tap_gopay_backend/encrypt"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const (
-	PUBLIC_KEY            string = "public_key"
 	ENCRYPTED_SEED_PHRASE string = "encrypted_seed_phrase"
 )
 
 // No json tags as request will be multipart/form-data
 type RegisterRequest struct {
-	Username  string `validate:"min=3,max=30"`
-	Email     string `validate:"email"`
-	PhoneNo   string `validate:"phone_no"`
-	PublicKey []byte `validate:"public_key"` // Base64-encoded public key data
-}
-
-func readFormFile(r *http.Request, fieldName string) ([]byte, error) {
-	file, _, err := r.FormFile(fieldName)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	// Data is in base64-encoded form
-	b64EncodedData, err := io.ReadAll(file)
-	if err != nil {
-		return nil, err
-	}
-
-	return base64.StdEncoding.DecodeString(string(b64EncodedData))
+	Username  string `json:"username" validate:"min=3,max=30"`
+	Email     string `json:"email" validate:"email"`
+	Password  string `json:"password" validate:"password"`
+	PhoneNo   string `json:"phone_no" validate:"phone_no"`
+	PublicKey string `json:"public_key" validate:"public_key"` // Base64 encoded public key in PEM format
 }
 
 func Register(w http.ResponseWriter, r *http.Request) {
-	err := r.ParseMultipartForm(10 << 20) // 10MB
+	var req RegisterRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		api.BadRequest(w, "Error parsing multipart/form-data")
+		api.BadRequest(w, "Error parsing request body", err)
 		return
 	}
 
-	// Read public key file
-	pubKeyBytes, err := readFormFile(r, PUBLIC_KEY)
-	if err != nil {
-		api.BadRequest(w, "Error reading uploaded file %v", PUBLIC_KEY)
-		return
-	}
-
-	req := RegisterRequest{
-		Username:  r.FormValue("username"),
-		Email:     r.FormValue("email"),
-		PhoneNo:   r.FormValue("phone_no"),
-		PublicKey: pubKeyBytes,
-	}
 	if err := validateStruct(req); err != nil {
-		api.BadRequest(w, err.Error())
+		api.BadRequest(w, err.Error(), nil)
 		return
 	}
 
@@ -77,7 +45,7 @@ func Register(w http.ResponseWriter, r *http.Request) {
 
 	err = database.CreateUser(
 		req.Username, req.Email,
-		req.PhoneNo,
+		req.Password, req.PhoneNo,
 		req.PublicKey,
 	)
 	if err != nil {
@@ -88,48 +56,45 @@ func Register(w http.ResponseWriter, r *http.Request) {
 	api.OK(w, "Created user account")
 }
 
+func verifyPassword(dbPassword, password string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(dbPassword), []byte(password))
+	return err == nil
+}
+
 type LoginRequest struct {
 	Email     string `json:"email" validate:"email"`
-	Signature string `json:"signature" validate:"signature"` // Base64 encoded signature of user's email
+	Password  string `json:"password" validate:"password"`
+	PublicKey string `json:"public_key" validate:"public_key"` // Base64 encoded public key in PEM format
 }
 
 func Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
-	decoder := json.NewDecoder(r.Body)
-	err := decoder.Decode(&req)
+	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		api.BadRequest(w, "email, signature fields required")
+		api.BadRequest(w, "Error parsing request body", err)
 		return
 	}
 
-	if err := validateStruct(req); err != nil {
-		api.BadRequest(w, err.Error())
+	if err = validateStruct(req); err != nil {
+		api.BadRequest(w, err.Error(), nil)
 		return
 	}
 
 	user, err := database.GetUser(req.Email)
 	if err != nil {
-		api.BadRequest(w, "Invalid email or signature")
+		api.BadRequest(w, "Invalid username or password", nil)
 		return
 	}
 
-	// Load users public key
-	pubKey, err := encrypt.LoadPublicKeyFromBytes(user.PublicKey)
+	passwordMatch := verifyPassword(user.Password, req.Password)
+	if !passwordMatch {
+		api.BadRequest(w, "Invalid username or password", nil)
+		return
+	}
+
+	err = database.CreatePublicKey(req.Email, req.PublicKey)
 	if err != nil {
-		api.Errorf(w, "Error loading user's public key; %v", err)
-		return
-	}
-
-	signature, err := base64.StdEncoding.DecodeString(req.Signature)
-	if err != nil {
-		api.BadRequest(w, "Expected base64 encoded signature")
-		return
-	}
-
-	digest := sha256.Sum256([]byte(req.Email))
-	ok := ecdsa.VerifyASN1(pubKey, digest[:], signature)
-	if !ok {
-		api.BadRequest(w, "Error verifiying users signature")
+		api.Errorf(w, "Error logging in user", fmt.Errorf("error creating public key; %v", err))
 		return
 	}
 
@@ -161,12 +126,12 @@ func ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	decoder := json.NewDecoder(r.Body)
 	err := decoder.Decode(&req)
 	if err != nil {
-		api.BadRequest(w, "email field required")
+		api.BadRequest(w, "Error parsing request body", err)
 		return
 	}
 
 	if err := validateStruct(req); err != nil {
-		api.BadRequest(w, err.Error())
+		api.BadRequest(w, err.Error(), nil)
 		return
 	}
 
@@ -192,34 +157,23 @@ func ForgotPassword(w http.ResponseWriter, r *http.Request) {
 }
 
 type passwordResetRequest struct {
-	Email     string `json:"email" validate:"email"`
-	Token     string `json:"token"`
-	PublicKey []byte `json:"public_key" validate:"public_key"`
+	Email    string `json:"email" validate:"email"`
+	Token    string `json:"token"`
+	Password string `json:"password" validate:"password"`
 }
 
 // WARN: This implementation is risky. If user ever loses access to their
 // email, then its game over for them.
 func ResetPassword(w http.ResponseWriter, r *http.Request) {
-	err := r.ParseMultipartForm(10 << 20) // 10MB
+	var req passwordResetRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		api.BadRequest(w, "Error parsing multipart/form-data")
+		api.BadRequest(w, "Error parsing request body", err)
 		return
 	}
 
-	// Read public key file
-	pubKeyBytes, err := readFormFile(r, PUBLIC_KEY)
-	if err != nil {
-		api.BadRequest(w, "Error reading uploaded file %v", PUBLIC_KEY)
-		return
-	}
-
-	req := passwordResetRequest{
-		Email:     r.FormValue("email"),
-		Token:     r.FormValue("token"),
-		PublicKey: pubKeyBytes,
-	}
 	if err := validateStruct(req); err != nil {
-		api.BadRequest(w, err.Error())
+		api.BadRequest(w, err.Error(), nil)
 		return
 	}
 
@@ -234,7 +188,7 @@ func ResetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = database.ChangePublicKey(req.Email, req.PublicKey)
+	err = database.ChangePassword(req.Email, req.Password)
 	if err != nil {
 		api.Errorf(w, "Error changing user password", err)
 		return

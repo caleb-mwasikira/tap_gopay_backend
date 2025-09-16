@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -24,7 +25,8 @@ import (
 
 func transferFunds(
 	serverUrl string,
-	sender, receiver, privKeyFilename string,
+	sender, receiver string,
+	sendersPrivKeyFilename string,
 	amount float64,
 ) (*http.Response, error) {
 	req := handlers.TransactionRequest{
@@ -37,7 +39,7 @@ func transferFunds(
 	log.Printf("Sending funds from '%v' to '%v'\n", sender, receiver)
 
 	// Load user's private key from file
-	privKeyPath := filepath.Join("keys", privKeyFilename)
+	privKeyPath := filepath.Join("keys", sendersPrivKeyFilename)
 	privKey, err := encrypt.LoadPrivateKeyFromFile(privKeyPath)
 	if err != nil {
 		return nil, err
@@ -50,6 +52,14 @@ func transferFunds(
 		return nil, err
 	}
 	req.Signature = base64.StdEncoding.EncodeToString(signature)
+
+	// Tell server which public key to use to verify signature
+	pubKeyBytes, err := encrypt.PemEncodePublicKey(&privKey.PublicKey)
+	if err != nil {
+		return nil, err
+	}
+	pubKeyHash := sha256.Sum256(pubKeyBytes)
+	req.PublicKeyHash = base64.StdEncoding.EncodeToString(pubKeyHash[:])
 
 	// Send sends fund request to server
 	body, err := json.Marshal(&req)
