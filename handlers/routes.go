@@ -26,7 +26,7 @@ var (
 func wsNotifyReceivedFunds(w http.ResponseWriter, r *http.Request) {
 	user, ok := getAuthUser(r)
 	if !ok {
-		api.Unauthorized(w)
+		api.Unauthorized(w, "Access to this route requires user login")
 		return
 	}
 

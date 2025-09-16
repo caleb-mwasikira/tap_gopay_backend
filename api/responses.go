@@ -9,16 +9,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 )
 
-// Returns 401 Unauthorized response to the user
-func Unauthorized(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusUnauthorized)
-	json.NewEncoder(w).Encode(map[string]string{
-		"message": "You are not authorized to access this resource",
-	})
-}
-
-func Unauthorized2(w http.ResponseWriter, message string, args ...any) {
+func Unauthorized(w http.ResponseWriter, message string, args ...any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnauthorized)
 
@@ -28,12 +19,19 @@ func Unauthorized2(w http.ResponseWriter, message string, args ...any) {
 	})
 }
 
-// Returns 400 BadRequest response to the user
-func BadRequest(w http.ResponseWriter, format string, args ...any) {
+// Returns 401 Unauthorized response to the user.
+//
+//	parameter message is displayed to the user
+//	parameter err is logged if err != nil
+func BadRequest(w http.ResponseWriter, message string, err error) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusBadRequest)
 
-	message := fmt.Sprintf(format, args...)
+	if err != nil {
+		log.Printf("%v %v; %v\n",
+			http.StatusText(http.StatusBadRequest), message, err)
+	}
+
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": message,
 	})

@@ -26,7 +26,7 @@ type Transaction struct {
 	// Time when transaction was initiated by client - signed by client
 	Timestamp   string `json:"timestamp"`
 	Signature   string `json:"signature"`
-	PublicKeyId string `json:"public_key_id"`
+	PublicKeyId string `json:"public_key_hash"`
 
 	// Time when record was saved to database
 	CreatedAt string `json:"created_at"`
@@ -61,7 +61,7 @@ func CreateTransaction(
 	sender, receiver string,
 	amount float64,
 	timestamp, signature string,
-	public_key_id string,
+	publicKeyHash string,
 ) (*Transaction, error) {
 	transactionId := generateTransactionId()
 
@@ -73,7 +73,7 @@ func CreateTransaction(
 		amount,
 		timestamp,
 		signature,
-		public_key_id
+		public_key_hash
 	) VALUES(?, ?, ?, ?, ?, ?, ?)`
 	_, err := db.Exec(
 		query,
@@ -83,7 +83,7 @@ func CreateTransaction(
 		amount,
 		timestamp,
 		signature,
-		public_key_id,
+		publicKeyHash,
 	)
 	if err != nil {
 		return nil, err
@@ -109,7 +109,7 @@ func GetTransaction(transactionId string) (*Transaction, error) {
 			amount,
 			timestamp,
 			signature,
-			public_key_id,
+			public_key_hash,
 			created_at
 		FROM transaction_details
 		WHERE transaction_id= ?
@@ -151,7 +151,7 @@ func GetRecentTransactions(sendersAddress string) ([]*Transaction, error) {
 			amount,
 			timestamp,
 			signature,
-			public_key_id,
+			public_key_hash,
 			created_at
 		FROM transaction_details
 		WHERE senders_wallet_address= ?
@@ -199,7 +199,7 @@ type RequestFundsResult struct {
 	// Time when transaction was initiated by client
 	Timestamp   string `json:"timestamp"`
 	Signature   string `json:"signature"`
-	PublicKeyId string `json:"public_key_id"`
+	PublicKeyId string `json:"public_key_hash"`
 
 	// Time when record was saved to database
 	CreatedAt string `json:"created_at"`
@@ -209,7 +209,7 @@ func CreateRequestFunds(
 	sender, receiver string,
 	amount float64,
 	timestamp, signature string,
-	publicKeyId string,
+	publicKeyHash string,
 ) (*RequestFundsResult, error) {
 	t := RequestFundsResult{
 		TransactionId: generateTransactionId(),
@@ -218,7 +218,7 @@ func CreateRequestFunds(
 		Amount:        amount,
 		Timestamp:     timestamp,
 		Signature:     signature,
-		PublicKeyId:   publicKeyId,
+		PublicKeyId:   publicKeyHash,
 	}
 
 	query := `
@@ -229,7 +229,7 @@ func CreateRequestFunds(
 		amount,
 		timestamp,
 		signature,
-		public_key_id
+		public_key_hash
 	) VALUES(?, ?, ?, ?, ?, ?, ?)`
 	_, err := db.Exec(
 		query,

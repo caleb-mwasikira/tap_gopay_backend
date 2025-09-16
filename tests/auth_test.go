@@ -2,14 +2,10 @@ package tests
 
 import (
 	"bytes"
-	"crypto/ecdsa"
-	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
-	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -50,22 +46,6 @@ func NewUser(username, email, password string) User {
 	}
 }
 
-func uploadFile(
-	multipartWriter *multipart.Writer, fieldName string,
-	data []byte,
-) error {
-	writer, err := multipartWriter.CreateFormFile(fieldName, fieldName)
-	if err != nil {
-		return err
-	}
-
-	// Base64 encode data b4 uploading it
-	b64EncodedData := base64.StdEncoding.EncodeToString(data)
-
-	_, err = writer.Write([]byte(b64EncodedData))
-	return err
-}
-
 func createAccount(serverUrl string, user User) (*http.Response, error) {
 	path := filepath.Join("keys", fmt.Sprintf("%v.key", user.Email))
 
@@ -74,32 +54,26 @@ func createAccount(serverUrl string, user User) (*http.Response, error) {
 		return nil, err
 	}
 
-	// Create multipart/form-data request
-	var buff bytes.Buffer
-	multipartWriter := multipart.NewWriter(&buff)
-
-	multipartWriter.WriteField("username", user.Username)
-	multipartWriter.WriteField("email", user.Email)
-	multipartWriter.WriteField("phone_no", user.Phone)
-
 	// Upload public key
 	pubKeyBytes, err := encrypt.PemEncodePublicKey(&privKey.PublicKey)
 	if err != nil {
 		return nil, err
 	}
 
-	err = uploadFile(multipartWriter, handlers.PUBLIC_KEY, pubKeyBytes)
+	req := handlers.RegisterRequest{
+		Username:  user.Username,
+		Email:     user.Email,
+		Password:  user.Password,
+		PhoneNo:   user.Phone,
+		PublicKey: base64.StdEncoding.EncodeToString(pubKeyBytes),
+	}
+	body, err := json.Marshal(&req)
 	if err != nil {
 		return nil, err
 	}
-	multipartWriter.Close()
 
 	// Send request
-	resp, err := http.Post(
-		serverUrl+"/auth/register",
-		multipartWriter.FormDataContentType(),
-		&buff,
-	)
+	resp, err := http.Post(serverUrl+"/auth/register", jsonContentType, bytes.NewBuffer(body))
 	if err != nil {
 		return nil, err
 	}
@@ -137,26 +111,26 @@ func TestLogin(t *testing.T) {
 	expectStatus(t, resp, http.StatusUnauthorized)
 	resp.Body.Close()
 
-	// Login
 	email := tommy.Email
+	password := tommy.Password
 
-	// Fetch or generate user's private key for signing
+	// Fetch or generate user's private and public keys
 	path := filepath.Join("keys", fmt.Sprintf("%v.key", email))
 	privKey, err := getPrivateKey(path)
 	if err != nil {
 		t.Fatalf("Error fetching user's private key; %v\n", err)
 	}
 
-	// Sign user's email
-	digest := sha256.Sum256([]byte(email))
-	signature, err := ecdsa.SignASN1(rand.Reader, privKey, digest[:])
+	// Upload public key to server
+	pubKeyBytes, err := encrypt.PemEncodePublicKey(&privKey.PublicKey)
 	if err != nil {
-		t.Fatalf("Error signing user's email; %v\n", err)
+		t.Fatalf("Error PEM encoding public key; %v\n", err)
 	}
 
 	req := handlers.LoginRequest{
 		Email:     email,
-		Signature: base64.StdEncoding.EncodeToString(signature),
+		Password:  password,
+		PublicKey: base64.StdEncoding.EncodeToString(pubKeyBytes),
 	}
 	body, err := json.Marshal(&req)
 	if err != nil {
@@ -224,23 +198,23 @@ func requireLogin(user User, serverUrl string) string {
 		return ""
 	}
 
-	// Fetch or generate user's private key for signing
+	// Fetch or generate user's private and public keys
 	path := filepath.Join("keys", fmt.Sprintf("%v.key", user.Email))
 	privKey, err := getPrivateKey(path)
 	if err != nil {
 		log.Fatalf("Error fetching user's private key; %v\n", err)
 	}
 
-	// Sign user's email
-	digest := sha256.Sum256([]byte(user.Email))
-	signature, err := ecdsa.SignASN1(rand.Reader, privKey, digest[:])
+	// Upload public key to server
+	pubKeyBytes, err := encrypt.PemEncodePublicKey(&privKey.PublicKey)
 	if err != nil {
-		log.Fatalf("Error signing user's email; %v\n", err)
+		log.Fatalf("Error PEM encoding public key; %v\n", err)
 	}
 
 	req := handlers.LoginRequest{
 		Email:     user.Email,
-		Signature: base64.StdEncoding.EncodeToString(signature),
+		Password:  user.Password,
+		PublicKey: base64.StdEncoding.EncodeToString(pubKeyBytes),
 	}
 	body, err := json.Marshal(&req)
 	if err != nil {

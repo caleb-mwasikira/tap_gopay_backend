@@ -40,7 +40,7 @@ func generateWalletAddress() string {
 func CreateWallet(w http.ResponseWriter, r *http.Request) {
 	user, ok := getAuthUser(r)
 	if !ok {
-		api.Unauthorized(w)
+		api.Unauthorized(w, "Access to this route requires user login")
 		return
 	}
 
@@ -60,7 +60,7 @@ func CreateWallet(w http.ResponseWriter, r *http.Request) {
 func GetAllWallets(w http.ResponseWriter, r *http.Request) {
 	user, ok := getAuthUser(r)
 	if !ok {
-		api.Unauthorized(w)
+		api.Unauthorized(w, "Access to this route requires user login")
 		return
 	}
 
@@ -76,13 +76,13 @@ func GetAllWallets(w http.ResponseWriter, r *http.Request) {
 func GetWalletDetails(w http.ResponseWriter, r *http.Request) {
 	user, ok := getAuthUser(r)
 	if !ok {
-		api.Unauthorized(w)
+		api.Unauthorized(w, "Access to this route requires user login")
 		return
 	}
 
 	walletAddress := chi.URLParam(r, "wallet_address")
 	if err := validateWalletAddress(walletAddress); err != nil {
-		api.BadRequest(w, err.Error())
+		api.BadRequest(w, err.Error(), nil)
 		return
 	}
 
@@ -98,13 +98,13 @@ func GetWalletDetails(w http.ResponseWriter, r *http.Request) {
 func FreezeWallet(w http.ResponseWriter, r *http.Request) {
 	user, ok := getAuthUser(r)
 	if !ok {
-		api.Unauthorized(w)
+		api.Unauthorized(w, "Access to this route requires user login")
 		return
 	}
 
 	walletAddress := chi.URLParam(r, "wallet_address")
 	if err := validateWalletAddress(walletAddress); err != nil {
-		api.BadRequest(w, err.Error())
+		api.BadRequest(w, err.Error(), nil)
 		return
 	}
 
@@ -120,13 +120,13 @@ func FreezeWallet(w http.ResponseWriter, r *http.Request) {
 func ActivateWallet(w http.ResponseWriter, r *http.Request) {
 	user, ok := getAuthUser(r)
 	if !ok {
-		api.Unauthorized(w)
+		api.Unauthorized(w, "Access to this route requires user login")
 		return
 	}
 
 	walletAddress := chi.URLParam(r, "wallet_address")
 	if err := validateWalletAddress(walletAddress); err != nil {
-		api.BadRequest(w, err.Error())
+		api.BadRequest(w, err.Error(), nil)
 		return
 	}
 
@@ -147,13 +147,13 @@ type SetupLimitRequest struct {
 func SetOrUpdateLimit(w http.ResponseWriter, r *http.Request) {
 	user, ok := getAuthUser(r)
 	if !ok {
-		api.Unauthorized(w)
+		api.Unauthorized(w, "Access to this route requires user login")
 		return
 	}
 
 	walletAddress := chi.URLParam(r, "wallet_address")
 	if err := validateWalletAddress(walletAddress); err != nil {
-		api.BadRequest(w, err.Error())
+		api.BadRequest(w, err.Error(), nil)
 		return
 	}
 
@@ -161,12 +161,12 @@ func SetOrUpdateLimit(w http.ResponseWriter, r *http.Request) {
 
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		api.BadRequest(w, "Invalid request body. Missing fields 'wallet_address' and 'amount'")
+		api.BadRequest(w, "Error parsing request body", err)
 		return
 	}
 
 	if err := validateStruct(req); err != nil {
-		api.BadRequest(w, err.Error())
+		api.BadRequest(w, err.Error(), nil)
 		return
 	}
 
