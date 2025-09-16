@@ -14,6 +14,7 @@ import (
 	"github.com/caleb-mwasikira/tap_gopay_backend/database"
 	"github.com/caleb-mwasikira/tap_gopay_backend/encrypt"
 	"github.com/go-chi/chi/v5"
+	"github.com/nyaruka/phonenumbers"
 )
 
 type TransactionRequest struct {
@@ -29,26 +30,19 @@ type TransactionRequest struct {
 }
 
 func (req TransactionRequest) Hash() []byte {
-	data, _ := json.Marshal(struct {
-		Sender    string  `json:"sender"`
-		Receiver  string  `json:"receiver"`
-		Amount    float64 `json:"amount"`
-		Timestamp string  `json:"timestamp"`
-		// We purposefully omit the signature
-	}{
-		Sender:    req.Sender,
-		Receiver:  req.Receiver,
-		Amount:    req.Amount,
-		Timestamp: req.Timestamp,
-	})
-
-	h := sha256.Sum256(data)
+	data := fmt.Sprintf("%s|%s|%.2f|%s", req.Sender, req.Receiver, req.Amount, req.Timestamp)
+	h := sha256.Sum256([]byte(data))
 	return h[:]
 }
 
 func getWalletOwnedBy(phone string) (*database.Wallet, error) {
+	phoneNumber, err := phonenumbers.Parse(phone, "KE")
+	if err != nil {
+		return nil, err
+	}
+
 	wallets, err := database.GetAllWalletsOwnedBy(
-		phone,
+		phoneNumber.String(),
 		func(wallet *database.Wallet) bool {
 			return wallet.IsActive
 		},

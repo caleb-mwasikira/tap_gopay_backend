@@ -1,6 +1,7 @@
 package database
 
 import (
+	"github.com/nyaruka/phonenumbers"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -9,7 +10,7 @@ type User struct {
 	Username      string `json:"username"`
 	Email         string `json:"email"`
 	Password      string `json:"password"`
-	PhoneNo       string `json:"phone_no"`
+	Phone         string `json:"phone_no"`
 	EmailVerified bool   `json:"email_verified"`
 }
 
@@ -26,13 +27,20 @@ func CreateUser(
 	username,
 	email,
 	password,
-	phoneNo,
+	phone,
 	b64EncodedPubKey string,
 ) error {
 	hashedPassword, err := hashPassword(password)
 	if err != nil {
 		return err
 	}
+
+	// Parse phone number
+	num, err := phonenumbers.Parse(phone, "KE")
+	if err != nil {
+		return err
+	}
+	phone = phonenumbers.Format(num, phonenumbers.INTERNATIONAL)
 
 	query := `
 		INSERT INTO users(
@@ -48,7 +56,7 @@ func CreateUser(
 		username,
 		email,
 		hashedPassword,
-		phoneNo,
+		phone,
 	)
 	if err != nil {
 		return err
@@ -72,7 +80,7 @@ func GetUser(email string) (*User, error) {
 		&user.Username,
 		&user.Email,
 		&user.Password,
-		&user.PhoneNo,
+		&user.Phone,
 	)
 	if err != nil {
 		return nil, err

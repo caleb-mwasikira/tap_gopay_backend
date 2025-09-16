@@ -14,7 +14,7 @@ const (
 type Account struct {
 	Username string `json:"username"`
 	Address  string `json:"wallet_address"`
-	PhoneNo  string `json:"phone_no"`
+	Phone    string `json:"phone_no"`
 }
 
 type Transaction struct {
@@ -118,10 +118,10 @@ func GetTransaction(transactionId string) (*Transaction, error) {
 	err := row.Scan(
 		&t.TransactionId,
 		&sender.Username,
-		&sender.PhoneNo,
+		&sender.Phone,
 		&sender.Address,
 		&receiver.Username,
-		&receiver.PhoneNo,
+		&receiver.Phone,
 		&receiver.Address,
 		&t.Amount,
 		&t.Timestamp,
@@ -170,10 +170,10 @@ func GetRecentTransactions(sendersAddress string) ([]*Transaction, error) {
 		err := rows.Scan(
 			&t.TransactionId,
 			&t.Sender.Username,
-			&t.Sender.PhoneNo,
+			&t.Sender.Phone,
 			&t.Sender.Address,
 			&t.Receiver.Username,
-			&t.Receiver.PhoneNo,
+			&t.Receiver.Phone,
 			&t.Receiver.Address,
 			&t.Amount,
 			&t.Timestamp,

@@ -20,7 +20,7 @@ type RegisterRequest struct {
 	Username  string `json:"username" validate:"min=3,max=30"`
 	Email     string `json:"email" validate:"email"`
 	Password  string `json:"password" validate:"password"`
-	PhoneNo   string `json:"phone_no" validate:"phone_no"`
+	Phone     string `json:"phone_no" validate:"phone_no"`
 	PublicKey string `json:"public_key" validate:"public_key"` // Base64 encoded public key in PEM format
 }
 
@@ -45,7 +45,7 @@ func Register(w http.ResponseWriter, r *http.Request) {
 
 	err = database.CreateUser(
 		req.Username, req.Email,
-		req.Password, req.PhoneNo,
+		req.Password, req.Phone,
 		req.PublicKey,
 	)
 	if err != nil {

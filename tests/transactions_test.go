@@ -116,8 +116,8 @@ func TestTransferFunds(t *testing.T) {
 	// Test: Transfer funds from one phone number to another
 	resp, err = transferFunds(
 		testServer.URL,
-		tommysWallet.PhoneNo,
-		leesWallet.PhoneNo,
+		tommysWallet.Phone,
+		leesWallet.Phone,
 		fmt.Sprintf("%v.key", tommy.Email),
 		1,
 	)
