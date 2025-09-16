@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/brianvoe/gofakeit"
 	"github.com/caleb-mwasikira/tap_gopay_backend/encrypt"
 	"github.com/caleb-mwasikira/tap_gopay_backend/handlers"
 )
@@ -35,6 +36,15 @@ type User struct {
 	Email    string
 	Password string
 	Phone    string
+}
+
+func NewRandomUser() User {
+	return User{
+		Username: gofakeit.Username(),
+		Email:    gofakeit.Email(),
+		Password: "2856",
+		Phone:    *randomChoice(phoneNumbers),
+	}
 }
 
 func NewUser(username, email, password string) User {
@@ -64,7 +74,7 @@ func createAccount(serverUrl string, user User) (*http.Response, error) {
 		Username:  user.Username,
 		Email:     user.Email,
 		Password:  user.Password,
-		PhoneNo:   user.Phone,
+		Phone:     user.Phone,
 		PublicKey: base64.StdEncoding.EncodeToString(pubKeyBytes),
 	}
 	body, err := json.Marshal(&req)

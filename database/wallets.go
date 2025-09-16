@@ -1,11 +1,13 @@
 package database
 
+import "github.com/nyaruka/phonenumbers"
+
 type Wallet struct {
 	UserId         int     `json:"user_id"`
 	Username       string  `json:"username"`
-	PhoneNo        string  `json:"phone_no"`
+	Phone          string  `json:"phone_no"`
 	Address        string  `json:"wallet_address"`
-	InitialDeposit float64 `json:"-"`
+	InitialDeposit float64 `json:"initial_deposit"`
 	IsActive       bool    `json:"is_active"`
 	CreatedAt      string  `json:"created_at"`
 	Balance        float64 `json:"balance"`
@@ -51,7 +53,7 @@ func GetWalletDetails(userId int, walletAddress string) (*Wallet, error) {
 	row := db.QueryRow(query, userId, walletAddress)
 	err := row.Scan(
 		&wallet.Username,
-		&wallet.PhoneNo,
+		&wallet.Phone,
 		&wallet.IsActive,
 		&wallet.CreatedAt,
 		&wallet.Balance,
@@ -60,6 +62,12 @@ func GetWalletDetails(userId int, walletAddress string) (*Wallet, error) {
 }
 
 func GetAllWalletsOwnedBy(phone string, filter func(*Wallet) bool) ([]*Wallet, error) {
+	num, err := phonenumbers.Parse(phone, "KE")
+	if err != nil {
+		return nil, err
+	}
+	phone = phonenumbers.Format(num, phonenumbers.INTERNATIONAL)
+
 	query := `
 		SELECT user_id, username, wallet_address, is_active, created_at, balance
 		FROM wallet_details
@@ -74,7 +82,7 @@ func GetAllWalletsOwnedBy(phone string, filter func(*Wallet) bool) ([]*Wallet, e
 
 	for rows.Next() {
 		wallet := Wallet{
-			PhoneNo: phone,
+			Phone: phone,
 		}
 		err := rows.Scan(
 			&wallet.UserId,
@@ -127,7 +135,7 @@ func GetAllWallets(userId int) ([]*Wallet, error) {
 		}
 		err = rows.Scan(
 			&wallet.Username,
-			&wallet.PhoneNo,
+			&wallet.Phone,
 			&wallet.Address,
 			&wallet.InitialDeposit,
 			&wallet.IsActive,

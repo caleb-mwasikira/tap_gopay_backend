@@ -4,12 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	mrand "math/rand/v2"
+	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/caleb-mwasikira/tap_gopay_backend/database"
+	"github.com/nyaruka/phonenumbers"
 )
 
 func TestCreateWallet(t *testing.T) {
@@ -70,7 +73,7 @@ func randomChoice[T any](items []T) *T {
 		return nil
 	}
 
-	index := mrand.IntN(len(items))
+	index := rand.IntN(len(items))
 	item := items[index]
 	return &item
 }
@@ -316,4 +319,107 @@ func TestActivateWallet(t *testing.T) {
 	expectStatus(t, resp, http.StatusOK)
 	resp.Body.Close()
 
+}
+
+func TestGetWalletsOwnedBy(t *testing.T) {
+	testServer := httptest.NewServer(r)
+	defer testServer.Close()
+
+	// Create random user
+	user := NewRandomUser()
+
+	// Create account for this user
+	resp, err := createAccount(testServer.URL, user)
+	if err != nil {
+		t.Fatalf("Error making request; %v\n", err)
+	}
+
+	expectStatus(t, resp, http.StatusOK)
+	resp.Body.Close()
+
+	// Create wallet for this user
+	requireLogin(user, testServer.URL)
+
+	resp, err = http.Post(
+		testServer.URL+"/new-wallet", jsonContentType, nil,
+	)
+	if err != nil {
+		t.Fatalf("Error making request; %v\n", err)
+	}
+	defer resp.Body.Close()
+
+	body := expectStatus(t, resp, http.StatusOK)
+
+	// Check if request body contains created wallet
+	var originalWallet database.Wallet
+	err = json.Unmarshal(body, &originalWallet)
+	if err != nil {
+		t.Fatalf("Expected response body to be Wallet but got garbage data")
+	}
+
+	// Get wallet tied to user's phone number
+	fetchedWallets, err := database.GetAllWalletsOwnedBy(user.Phone, nil)
+	if err != nil {
+		t.Fatalf("Error making request; %v\n", err)
+	}
+
+	// Check if original wallet is in fetched wallets
+	ok := slices.ContainsFunc(fetchedWallets, func(w *database.Wallet) bool {
+		return w.Address == originalWallet.Address
+	})
+	if !ok {
+		t.Fatalf("GetAllWalletsOwnedBy returns invalid data; %v\n", err)
+	}
+
+	// Randomize phone number input
+	dirtyPhone, err := dirtifyPhoneInput(user.Phone)
+	if err != nil {
+		t.Fatalf("Error dirtying phone input; %v\n", err)
+	}
+
+	// Fetch wallet tield to dirtied phone number
+	fetchedWallets, err = database.GetAllWalletsOwnedBy(dirtyPhone, nil)
+	if err != nil {
+		t.Fatalf("Error making request; %v\n", err)
+	}
+
+	// Check if original wallet is in fetched wallets
+	ok = slices.ContainsFunc(fetchedWallets, func(w *database.Wallet) bool {
+		return w.Address == originalWallet.Address
+	})
+	if !ok {
+		t.Fatalf("GetAllWalletsOwnedBy returns invalid data; %v\n", err)
+	}
+
+}
+
+// Changes phone numbers format just a little bit
+// eg from international (+254) to national(07) format
+// or add random spaces in between numbers
+func dirtifyPhoneInput(phone string) (string, error) {
+	num, err := phonenumbers.Parse(phone, "KE")
+	if err != nil {
+		return "", err
+	}
+
+	formats := []phonenumbers.PhoneNumberFormat{
+		phonenumbers.E164,
+		phonenumbers.NATIONAL,
+		phonenumbers.INTERNATIONAL,
+	}
+	format := randomChoice(formats)
+	phone = phonenumbers.Format(num, *format)
+
+	// Randomly add spaces in between numbers
+	str := strings.Builder{}
+
+	for _, char := range phone {
+		addSpace := rand.Float64() > 0.5
+		if addSpace {
+			str.WriteString(" ")
+		}
+		str.WriteRune(char)
+	}
+
+	return str.String(), nil
 }
