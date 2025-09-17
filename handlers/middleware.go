@@ -54,10 +54,10 @@ func getAccessTokenFromCookies(r *http.Request) (string, error) {
 }
 
 func getAccessTokenFromHeaders(r *http.Request) (string, error) {
-	auth := r.Header.Get("Authorization")
+	auth := r.Header.Get("AuthToken")
 	fields := strings.Split(auth, " ")
 	if len(fields) != 2 {
-		return "", fmt.Errorf("expected Authorization header to use format Bearer <token>")
+		return "", fmt.Errorf("expected AuthToken header to use format Bearer <token>")
 	}
 
 	accesToken := fields[1]
@@ -66,25 +66,53 @@ func getAccessTokenFromHeaders(r *http.Request) (string, error) {
 
 func RequireAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cookieAccessToken, err := getAccessTokenFromCookies(r)
-		headerAccessToken, err2 := getAccessTokenFromHeaders(r)
+		cookieToken, err := getAccessTokenFromCookies(r)
+		headerToken, err2 := getAccessTokenFromHeaders(r)
 
 		if err != nil && err2 != nil {
-			api.Unauthorized(w, "Access to this route requires user login")
+			api.Unauthorized(w, "Access to this resource requires user login")
 			return
 		}
 
 		var user database.User
 
-		if validToken(cookieAccessToken, &user) || validToken(headerAccessToken, &user) {
-			// Embed user into context
-			newCtx := context.WithValue(r.Context(), USER_CTX_KEY, &user)
-
-			next.ServeHTTP(w, r.WithContext(newCtx))
+		if !validToken(cookieToken, &user) && !validToken(headerToken, &user) {
+			api.Unauthorized(w, "Access to this resource requires user login")
 			return
 		}
 
-		api.Unauthorized(w, "Access to this route requires user login")
+		// Embed user into context
+		newCtx := context.WithValue(r.Context(), USER_CTX_KEY, &user)
+		next.ServeHTTP(w, r.WithContext(newCtx))
+	})
+}
+
+func RequireAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cookieToken, err := getAccessTokenFromCookies(r)
+		headerToken, err2 := getAccessTokenFromHeaders(r)
+
+		if err != nil && err2 != nil {
+			api.Unauthorized(w, "Access to this resource requires user login")
+			return
+		}
+
+		var user database.User
+
+		if !validToken(cookieToken, &user) && !validToken(headerToken, &user) {
+			api.Unauthorized(w, "Access to this resource requires user login")
+			return
+		}
+
+		// Check users role
+		if user.Role != "admin" {
+			api.Unauthorized(w, "You are not authorized to access this resource")
+			return
+		}
+
+		// Embed user into context
+		newCtx := context.WithValue(r.Context(), USER_CTX_KEY, &user)
+		next.ServeHTTP(w, r.WithContext(newCtx))
 	})
 }
 

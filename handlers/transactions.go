@@ -3,8 +3,10 @@ package handlers
 import (
 	"crypto/ecdsa"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -21,6 +23,7 @@ type TransactionRequest struct {
 	Sender    string  `json:"sender" validate:"account"`
 	Receiver  string  `json:"receiver" validate:"account"`
 	Amount    float64 `json:"amount" validate:"amount"`
+	Fee       float64 `json:"fee" validate:"min=0"`
 	Timestamp string  `json:"timestamp"` // Time when transaction was initiated by the client
 
 	// Base64 encoded hash of public key
@@ -30,7 +33,7 @@ type TransactionRequest struct {
 }
 
 func (req TransactionRequest) Hash() []byte {
-	data := fmt.Sprintf("%s|%s|%.2f|%s", req.Sender, req.Receiver, req.Amount, req.Timestamp)
+	data := fmt.Sprintf("%s|%s|%.2f|%.2f|%s", req.Sender, req.Receiver, req.Amount, req.Fee, req.Timestamp)
 	h := sha256.Sum256([]byte(data))
 	return h[:]
 }
@@ -139,8 +142,27 @@ func TransferFunds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Verify fee amount
+	var expectedFee float64
+
+	transactionFee, err := getTransactionFees(req.Amount)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		api.Errorf(w, "Error fetching transaction fees", err)
+		return
+	}
+
+	if transactionFee != nil {
+		expectedFee = transactionFee.Fee
+	}
+
+	if req.Fee != expectedFee {
+		api.BadRequest(w, "Invalid transaction fees", nil)
+		return
+	}
+
 	transaction, err := database.CreateTransaction(
-		req.Sender, req.Receiver, req.Amount,
+		req.Sender, req.Receiver,
+		req.Amount, req.Fee,
 		req.Timestamp, req.Signature,
 		req.PublicKeyHash,
 	)
