@@ -12,6 +12,7 @@ type User struct {
 	Password      string `json:"password"`
 	Phone         string `json:"phone_no"`
 	EmailVerified bool   `json:"email_verified"`
+	Role          string `json:"role"`
 }
 
 func hashPassword(password string) (string, error) {
@@ -69,7 +70,13 @@ func CreateUser(
 // Fetches user by their email
 func GetUser(email string) (*User, error) {
 	query := `
-		SELECT id, username, email, password, phone_no
+		SELECT
+			id,
+			username,
+			email,
+			password,
+			phone_no,
+			role
 		FROM users WHERE email = ?
 	`
 	row := db.QueryRow(query, email)
@@ -81,6 +88,7 @@ func GetUser(email string) (*User, error) {
 		&user.Email,
 		&user.Password,
 		&user.Phone,
+		&user.Role,
 	)
 	if err != nil {
 		return nil, err

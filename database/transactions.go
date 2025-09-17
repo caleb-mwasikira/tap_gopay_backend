@@ -22,6 +22,7 @@ type Transaction struct {
 	Sender        Account `json:"sender"`
 	Receiver      Account `json:"receiver"`
 	Amount        float64 `json:"amount"`
+	Fee           float64 `json:"fee"`
 
 	// Time when transaction was initiated by client - signed by client
 	Timestamp   string `json:"timestamp"`
@@ -59,7 +60,7 @@ func generateTransactionId() string {
 
 func CreateTransaction(
 	sender, receiver string,
-	amount float64,
+	amount, fee float64,
 	timestamp, signature string,
 	publicKeyHash string,
 ) (*Transaction, error) {
@@ -71,16 +72,18 @@ func CreateTransaction(
 		sender,
 		receiver,
 		amount,
+		fee,
 		timestamp,
 		signature,
 		public_key_hash
-	) VALUES(?, ?, ?, ?, ?, ?, ?)`
+	) VALUES(?, ?, ?, ?, ?, ?, ?, ?)`
 	_, err := db.Exec(
 		query,
 		transactionId,
 		sender,
 		receiver,
 		amount,
+		fee,
 		timestamp,
 		signature,
 		publicKeyHash,
@@ -107,6 +110,7 @@ func GetTransaction(transactionId string) (*Transaction, error) {
 			receivers_phone,
 			receivers_wallet_address,
 			amount,
+			fee,
 			timestamp,
 			signature,
 			public_key_hash,
@@ -124,6 +128,7 @@ func GetTransaction(transactionId string) (*Transaction, error) {
 		&receiver.Phone,
 		&receiver.Address,
 		&t.Amount,
+		&t.Fee,
 		&t.Timestamp,
 		&t.Signature,
 		&t.PublicKeyId,
@@ -149,6 +154,7 @@ func GetRecentTransactions(sendersAddress string) ([]*Transaction, error) {
 			receivers_phone,
 			receivers_wallet_address,
 			amount,
+			fee,
 			timestamp,
 			signature,
 			public_key_hash,
@@ -176,6 +182,7 @@ func GetRecentTransactions(sendersAddress string) ([]*Transaction, error) {
 			&t.Receiver.Phone,
 			&t.Receiver.Address,
 			&t.Amount,
+			&t.Fee,
 			&t.Timestamp,
 			&t.Signature,
 			&t.PublicKeyId,

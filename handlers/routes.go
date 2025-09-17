@@ -18,8 +18,18 @@ func GetRoutes() *chi.Mux {
 		r.Post("/auth/forgot-password", ForgotPassword)
 		r.Post("/auth/reset-password", ResetPassword)
 
+		r.Get("/all-transaction-fees", GetAllTransactionFees)
+		r.Get("/transaction-fees", GetTransactionFees)
+
+		// Admin routes
 		r.Group(func(r chi.Router) {
-			// Protected routes
+			r.Use(RequireAdmin)
+
+			r.Post("/transaction-fees", CreateTransactionFees)
+		})
+
+		// Protected routes
+		r.Group(func(r chi.Router) {
 			r.Use(RequireAuthMiddleware)
 
 			r.HandleFunc("/ws-notifications", wsNotifyReceivedFunds)

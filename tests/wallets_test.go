@@ -15,6 +15,23 @@ import (
 	"github.com/nyaruka/phonenumbers"
 )
 
+func createWallet(serverUrl string, user User) (*database.Wallet, error) {
+	requireLogin(user, serverUrl)
+
+	resp, err := http.Post(
+		serverUrl+"/new-wallet", jsonContentType, nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Check if request body contains created wallet
+	var wallet database.Wallet
+	err = json.NewDecoder(resp.Body).Decode(&wallet)
+	return &wallet, err
+}
+
 func TestCreateWallet(t *testing.T) {
 	testServer := httptest.NewServer(r)
 	defer testServer.Close()
@@ -170,26 +187,14 @@ func TestFreezeWallet(t *testing.T) {
 	testServer := httptest.NewServer(r)
 	defer testServer.Close()
 
-	// Get one of tommy's active wallets
-	tommysWallet, err := getUsersWallet(
-		testServer.URL,
-		tommy,
-		func(wallet database.Wallet) bool {
-			return wallet.IsActive
-		},
-	)
+	// Create new wallet for tommy
+	tommysWallet, err := createWallet(testServer.URL, tommy)
 	if err != nil {
 		t.Fatalf("Error fetching user's wallet; %v\n", err)
 	}
 
-	// Get one of lee's wallets
-	leesWallet, err := getUsersWallet(
-		testServer.URL,
-		lee,
-		func(wallet database.Wallet) bool {
-			return wallet.IsActive
-		},
-	)
+	// Create new wallet for lee
+	leesWallet, err := createWallet(testServer.URL, lee)
 	if err != nil {
 		t.Fatalf("Error fetching user's wallet; %v\n", err)
 	}
@@ -325,10 +330,8 @@ func TestGetWalletsOwnedBy(t *testing.T) {
 	testServer := httptest.NewServer(r)
 	defer testServer.Close()
 
-	// Create random user
+	// Create account for random user
 	user := NewRandomUser()
-
-	// Create account for this user
 	resp, err := createAccount(testServer.URL, user)
 	if err != nil {
 		t.Fatalf("Error making request; %v\n", err)
@@ -337,7 +340,7 @@ func TestGetWalletsOwnedBy(t *testing.T) {
 	expectStatus(t, resp, http.StatusOK)
 	resp.Body.Close()
 
-	// Create wallet for this user
+	// Create wallet for random user
 	requireLogin(user, testServer.URL)
 
 	resp, err = http.Post(

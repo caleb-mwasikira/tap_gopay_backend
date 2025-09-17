@@ -23,16 +23,37 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+func getTransactionFee(serverUrl string, amount float64) (float64, error) {
+	resp, err := http.Get(serverUrl + fmt.Sprintf("/transaction-fees?amount=%.2f", amount))
+	if err != nil {
+		return 0, err
+	}
+
+	var transactionFee database.TransactionFee
+	err = json.NewDecoder(resp.Body).Decode(&transactionFee)
+	if err != nil {
+		return 0, err
+	}
+
+	return transactionFee.Fee, nil
+}
+
 func transferFunds(
 	serverUrl string,
 	sender, receiver string,
 	sendersPrivKeyFilename string,
 	amount float64,
 ) (*http.Response, error) {
+	fee, err := getTransactionFee(serverUrl, amount)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching transaction fees; %v", err)
+	}
+
 	req := handlers.TransactionRequest{
 		Sender:    sender,
 		Receiver:  receiver,
 		Amount:    amount,
+		Fee:       fee,
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	}
 
@@ -104,7 +125,7 @@ func TestTransferFunds(t *testing.T) {
 		tommysWallet.Address,
 		leesWallet.Address,
 		fmt.Sprintf("%v.key", tommy.Email),
-		1,
+		150,
 	)
 	if err != nil {
 		t.Fatalf("Error making request; %v\n", err)
@@ -218,7 +239,7 @@ func waitForNotifications(
 	// Establish WebSocket connection
 	rawUrl := "ws://" + u.Host + "/ws-notifications"
 	header := http.Header{}
-	header.Add("Authorization", fmt.Sprintf("Bearer %v", accessToken))
+	header.Add("AuthToken", fmt.Sprintf("Bearer %v", accessToken))
 
 	conn, resp, err := websocket.DefaultDialer.Dial(rawUrl, header)
 	if err != nil {
@@ -308,4 +329,51 @@ func TestWsNotifyReceivedFunds(t *testing.T) {
 	case notification := <-notifications:
 		log.Printf("Received transaction notification from server %#v\n", notification)
 	}
+}
+
+func TestSendingInvalidAmount(t *testing.T) {
+	testServer := httptest.NewServer(r)
+	defer testServer.Close()
+
+	// Create wallet for lee
+	leesWallet, err := createWallet(testServer.URL, lee)
+	if err != nil {
+		t.Fatalf("Error making request; %v\n", err)
+	}
+
+	// Create wallet for tommy
+	tommysWallet, err := createWallet(testServer.URL, tommy)
+	if err != nil {
+		t.Fatalf("Error making request; %v\n", err)
+	}
+
+	// Test sending amount > INITIAL_DEPOSIT
+	resp, err := transferFunds(
+		testServer.URL,
+		tommysWallet.Address,
+		leesWallet.Address,
+		fmt.Sprintf("%v.key", tommy.Email),
+		handlers.INITIAL_DEPOSIT+1,
+	)
+	if err != nil {
+		t.Fatalf("Error making request; %v\n", err)
+	}
+	defer resp.Body.Close()
+
+	expectStatus(t, resp, http.StatusInternalServerError)
+
+	// Test sending negative amount
+	resp, err = transferFunds(
+		testServer.URL,
+		tommysWallet.Address,
+		leesWallet.Address,
+		fmt.Sprintf("%v.key", tommy.Email),
+		-10.0,
+	)
+	if err != nil {
+		t.Fatalf("Error making request; %v\n", err)
+	}
+	defer resp.Body.Close()
+
+	expectStatus(t, resp, http.StatusBadRequest)
 }

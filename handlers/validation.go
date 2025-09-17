@@ -130,9 +130,9 @@ func validateStruct(obj any) error {
 func greaterThan(v interface{}, limit int) bool {
 	switch val := v.(type) {
 	case int:
-		return val >= limit
+		return val > limit
 	case string:
-		return len(val) >= limit
+		return len(val) > limit
 	default:
 		return false
 	}
@@ -141,9 +141,9 @@ func greaterThan(v interface{}, limit int) bool {
 func lessThan(v interface{}, limit int) bool {
 	switch val := v.(type) {
 	case int:
-		return val <= limit
+		return val < limit
 	case string:
-		return len(val) <= limit
+		return len(val) < limit
 	default:
 		return false
 	}
