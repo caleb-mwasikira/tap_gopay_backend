@@ -67,6 +67,7 @@ func CreateWallet(w http.ResponseWriter, r *http.Request) {
 		walletAddress,
 		req.WalletName,
 		INITIAL_DEPOSIT,
+		1,
 	)
 	if err != nil {
 		api.Errorf(w, "Error creating wallet", err)

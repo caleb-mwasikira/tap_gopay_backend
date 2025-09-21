@@ -149,3 +149,40 @@ func MigrateDatabase(rootUser, rootPassword string) error {
 
 	return nil
 }
+
+func TruncateTables() error {
+	rows, err := db.Query("SHOW TABLES")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	tables := []string{}
+
+	for rows.Next() {
+		var table string
+		err = rows.Scan(&table)
+		if err != nil {
+			return err
+		}
+
+		tables = append(tables, table)
+	}
+
+	_, err = db.Exec("SET FOREIGN_KEY_CHECKS = 0")
+	if err != nil {
+		return err
+	}
+	defer db.Exec("SET FOREIGN_KEY_CHECKS = 1") // re-enable after
+
+	for _, table := range tables {
+		query := fmt.Sprintf("TRUNCATE TABLE `%s`", table)
+
+		if _, err := db.Exec(query); err != nil {
+			log.Printf("Error truncating table %s: %v", table, err)
+		} else {
+			log.Printf("Truncated table %s", table)
+		}
+	}
+	return nil
+}

@@ -7,9 +7,12 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"net/http/cookiejar"
+	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
+	"github.com/caleb-mwasikira/tap_gopay_backend/database"
 	"github.com/caleb-mwasikira/tap_gopay_backend/handlers"
 	"github.com/go-chi/chi/v5"
 )
@@ -64,6 +67,7 @@ func printResponse(resp *http.Response, expectedStatusCode int) []byte {
 // Checks the response for expected status code.
 // Fails if response status code does NOT match expected status code.
 func expectStatus(t *testing.T, resp *http.Response, expectedStatusCode int) []byte {
+	log.Println(t.Name())
 	body := printResponse(resp, expectedStatusCode)
 
 	// Check status code
@@ -84,4 +88,35 @@ func randomString(length uint) string {
 		sb.WriteByte(charset[num])
 	}
 	return sb.String()
+}
+
+func TestMain(m *testing.M) {
+	// Setup code here (runs once before tests)
+	err := database.TruncateTables()
+	if err != nil {
+		log.Fatalf("Error truncating database tables; %v\n", err)
+	}
+
+	testServer := httptest.NewServer(r)
+	defer testServer.Close()
+
+	// Create accounts for tommy and lee
+	resp, err := createAccount(testServer.URL, tommy)
+	if err != nil {
+		log.Fatalf("Error creating test accounts; %v\n", err)
+	}
+	resp.Body.Close()
+
+	resp, err = createAccount(testServer.URL, lee)
+	if err != nil {
+		log.Fatalf("Error creating test accounts; %v\n", err)
+	}
+	resp.Body.Close()
+
+	// Run tests
+	code := m.Run()
+
+	// Teardown code here (runs after tests)
+
+	os.Exit(code)
 }

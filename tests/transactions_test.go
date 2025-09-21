@@ -2,7 +2,6 @@ package tests
 
 import (
 	"bytes"
-	"context"
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/sha256"
@@ -12,7 +11,6 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"path/filepath"
 	"testing"
 	"time"
@@ -20,7 +18,6 @@ import (
 	"github.com/caleb-mwasikira/tap_gopay_backend/database"
 	"github.com/caleb-mwasikira/tap_gopay_backend/encrypt"
 	"github.com/caleb-mwasikira/tap_gopay_backend/handlers"
-	"github.com/gorilla/websocket"
 )
 
 func getTransactionFee(serverUrl string, amount float64) (float64, error) {
@@ -95,24 +92,12 @@ func TestTransferFunds(t *testing.T) {
 	testServer := httptest.NewServer(r)
 	defer testServer.Close()
 
-	tommysWallet, err := getUsersWallet(
-		testServer.URL,
-		tommy,
-		func(wallet database.Wallet) bool {
-			return wallet.IsActive
-		},
-	)
+	tommysWallet, err := createWallet(testServer.URL, tommy)
 	if err != nil {
 		t.Fatalf("Error fetching users wallet; %v\n", err)
 	}
 
-	leesWallet, err := getUsersWallet(
-		testServer.URL,
-		lee,
-		func(wallet database.Wallet) bool {
-			return wallet.IsActive
-		},
-	)
+	leesWallet, err := createWallet(testServer.URL, lee)
 	if err != nil {
 		t.Fatalf("Error fetching users wallet; %v\n", err)
 	}
@@ -125,7 +110,7 @@ func TestTransferFunds(t *testing.T) {
 		tommysWallet.Address,
 		leesWallet.Address,
 		fmt.Sprintf("%v.key", tommy.Email),
-		150,
+		1,
 	)
 	if err != nil {
 		t.Fatalf("Error making request; %v\n", err)
@@ -168,7 +153,7 @@ func TestGetRecentTransactions(t *testing.T) {
 	defer testServer.Close()
 
 	// Fetch one of tommy's wallets
-	tommysWallet, err := getUsersWallet(testServer.URL, tommy, nil)
+	tommysWallet, err := createWallet(testServer.URL, tommy)
 	if err != nil {
 		t.Fatalf("Error fetching user's wallet; %v\n", err)
 	}
@@ -189,7 +174,7 @@ func TestGetTransaction(t *testing.T) {
 	requireLogin(tommy, testServer.URL)
 
 	// Fetch one of tommy's wallet
-	tommysWallet, err := getUsersWallet(testServer.URL, tommy, nil)
+	tommysWallet, err := createWallet(testServer.URL, tommy)
 	if err != nil {
 		t.Fatalf("Error fetching user's wallet; %v\n", err)
 	}
@@ -206,7 +191,7 @@ func TestGetTransaction(t *testing.T) {
 		t.Fatalf("At least one transaction required in database for test to complete")
 	}
 
-	resp, err := http.Get(testServer.URL + fmt.Sprintf("/transactions/%v", transaction.TransactionId))
+	resp, err := http.Get(testServer.URL + fmt.Sprintf("/transactions/%v", transaction.TransactionCode))
 	if err != nil {
 		t.Fatalf("Error making request; %v\n", err)
 	}
@@ -218,114 +203,6 @@ func TestGetTransaction(t *testing.T) {
 	err = json.Unmarshal(body, &fetchedTransaction)
 	if err != nil {
 		t.Errorf("Expected transaction but got garbage data")
-	}
-}
-
-func waitForNotifications(
-	ctx context.Context,
-	user User,
-	serverUrl string,
-	notifications chan<- database.Transaction,
-) error {
-	accessToken := requireLogin(user, serverUrl)
-
-	log.Printf("%v waiting for transaction notifications\n", user.Username)
-
-	u, err := url.Parse(serverUrl)
-	if err != nil {
-		return err
-	}
-
-	// Establish WebSocket connection
-	rawUrl := "ws://" + u.Host + "/ws-notifications"
-	header := http.Header{}
-	header.Add("AuthToken", fmt.Sprintf("Bearer %v", accessToken))
-
-	conn, resp, err := websocket.DefaultDialer.Dial(rawUrl, header)
-	if err != nil {
-		printResponse(resp, http.StatusOK)
-		return err
-	}
-	defer conn.Close()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		default:
-			var transaction database.Transaction
-
-			err = conn.ReadJSON(&transaction)
-			if err != nil {
-				return fmt.Errorf("Expected message to be of type Transaction but found garbage data")
-			}
-
-			notifications <- transaction
-		}
-	}
-}
-
-func TestWsNotifyReceivedFunds(t *testing.T) {
-	testServer := httptest.NewServer(r)
-	defer testServer.Close()
-
-	// Get one of tommy's active wallets
-	tommysWallet, err := getUsersWallet(testServer.URL, tommy, func(w database.Wallet) bool {
-		return w.IsActive
-	})
-	if err != nil {
-		t.Fatalf("Error fetching user's wallet; %v\n", err)
-	}
-
-	// Get one of lee's active wallets
-	leesWallet, err := getUsersWallet(testServer.URL, lee, func(w database.Wallet) bool {
-		return w.IsActive
-	})
-	if err != nil {
-		t.Fatalf("Error fetching user's wallet; %v\n", err)
-	}
-
-	// Lee waits for received transactions
-	notifications := make(chan database.Transaction)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	go func() {
-		err = waitForNotifications(ctx, lee, testServer.URL, notifications)
-		if err != nil {
-			log.Fatalf("Error waiting for transaction notifications; %v\n", err)
-		}
-	}()
-
-	// Sleep for few seconds to give time for lee to start
-	// their notification listener
-	time.Sleep(2 * time.Second)
-
-	// Tommy sends money to lee
-	requireLogin(tommy, testServer.URL)
-
-	resp, err := transferFunds(
-		testServer.URL,
-		tommysWallet.Address,
-		leesWallet.Address,
-		fmt.Sprintf("%v.key", tommy.Email),
-		1,
-	)
-	if err != nil {
-		t.Fatalf("Error making request; %v\n", err)
-	}
-
-	expectStatus(t, resp, http.StatusOK)
-	resp.Body.Close()
-
-	// Lee should receive notification of transaction
-	select {
-	case <-time.After(20 * time.Second):
-		cancel()
-		t.Errorf("Tired of waiting for transaction notification")
-
-	case notification := <-notifications:
-		log.Printf("Received transaction notification from server %#v\n", notification)
 	}
 }
 

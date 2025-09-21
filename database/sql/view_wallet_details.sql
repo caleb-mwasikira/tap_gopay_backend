@@ -2,25 +2,18 @@ DROP TABLE IF EXISTS `wallet_details`;
 
 DROP VIEW IF EXISTS `wallet_details`;
 
-CREATE VIEW
-    `wallet_details` AS
 SELECT
     `u`.`id` AS `user_id`,
     `u`.`username` AS `username`,
     `u`.`phone_no` AS `phone_no`,
-    `wallet`.`wallet_address` AS `wallet_address`,
-    `wallet`.`wallet_name` AS `wallet_name`,
-    `wallet`.`initial_deposit` AS `initial_deposit`,
-    `wallet`.`is_active` AS `is_active`,
-    `wallet`.`created_at` AS `created_at`,
+    `w`.`wallet_address` AS `wallet_address`,
+    `w`.`wallet_name` AS `wallet_name`,
+    `w`.`initial_deposit` AS `initial_deposit`,
+    `w`.`is_active` AS `is_active`,
+    `w`.`created_at` AS `created_at`,
     `b`.`balance` AS `balance`
 FROM
-    (
-        (
-            `wallets` `wallet`
-            join `users` `u` on ((`u`.`id` = `wallet`.`user_id`))
-        )
-        join `balances` `b` on (
-            (`b`.`wallet_address` = `wallet`.`wallet_address`)
-        )
-    );
+    `tap_gopay`.`wallets` AS `w`
+    JOIN `tap_gopay`.`wallet_owners` AS `wo` ON `wo`.`wallet_address` = `w`.`wallet_address`
+    JOIN `tap_gopay`.`users` AS `u` ON `u`.`id` = `wo`.`user_id`
+    JOIN `tap_gopay`.`balances` AS `b` ON `b`.`wallet_address` = `w`.`wallet_address`;

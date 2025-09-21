@@ -18,11 +18,11 @@ type Account struct {
 }
 
 type Transaction struct {
-	TransactionId string  `json:"transaction_id"`
-	Sender        Account `json:"sender"`
-	Receiver      Account `json:"receiver"`
-	Amount        float64 `json:"amount"`
-	Fee           float64 `json:"fee"`
+	TransactionCode string  `json:"transaction_code"`
+	Sender          Account `json:"sender"`
+	Receiver        Account `json:"receiver"`
+	Amount          float64 `json:"amount"`
+	Fee             float64 `json:"fee"`
 
 	// Time when transaction was initiated by client - signed by client
 	Timestamp   string `json:"timestamp"`
@@ -40,7 +40,7 @@ func generateRandomChar() string {
 	return fmt.Sprintf("%c", randomChar)
 }
 
-func generateTransactionId() string {
+func generateTransactionCode() string {
 	rand.NewSource(time.Now().UnixNano())
 
 	str := strings.Builder{}
@@ -59,50 +59,76 @@ func generateTransactionId() string {
 }
 
 func CreateTransaction(
+	userId int,
 	sender, receiver string,
 	amount, fee float64,
 	timestamp, signature string,
 	publicKeyHash string,
 ) (*Transaction, error) {
-	transactionId := generateTransactionId()
+	transactionCode := "TX" + generateTransactionCode()
+
+	tx, err := db.Begin()
+	if err != nil {
+		return nil, err
+	}
 
 	query := `
 	INSERT INTO transactions(
-		transaction_id,
+		transaction_code,
 		sender,
 		receiver,
 		amount,
 		fee,
-		timestamp,
-		signature,
-		public_key_hash
-	) VALUES(?, ?, ?, ?, ?, ?, ?, ?)`
-	_, err := db.Exec(
+		timestamp
+	) VALUES(?, ?, ?, ?, ?, ?)`
+	_, err = tx.Exec(
 		query,
-		transactionId,
+		transactionCode,
 		sender,
 		receiver,
 		amount,
 		fee,
 		timestamp,
-		signature,
-		publicKeyHash,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	return GetTransaction(transactionId)
+	// Add signature into signatures table
+	query = `
+	INSERT INTO signatures(
+		transaction_code,
+		user_id,
+		signature,
+		public_key_hash
+	) VALUES(?, ?, ?, ?)`
+	_, err = tx.Exec(
+		query,
+		transactionCode,
+		userId,
+		signature,
+		publicKeyHash,
+	)
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	return GetTransaction(transactionCode)
 }
 
-func GetTransaction(transactionId string) (*Transaction, error) {
+func GetTransaction(transactionCode string) (*Transaction, error) {
 	var t Transaction
 	var sender Account
 	var receiver Account
 
 	query := `
 		SELECT
-			transaction_id,
+			transaction_code,
 			senders_username,
 			senders_phone,
 			senders_wallet_address,
@@ -116,11 +142,11 @@ func GetTransaction(transactionId string) (*Transaction, error) {
 			public_key_hash,
 			created_at
 		FROM transaction_details
-		WHERE transaction_id= ?
+		WHERE transaction_code= ?
 	`
-	row := db.QueryRow(query, transactionId)
+	row := db.QueryRow(query, transactionCode)
 	err := row.Scan(
-		&t.TransactionId,
+		&t.TransactionCode,
 		&sender.Username,
 		&sender.Phone,
 		&sender.Address,
@@ -146,7 +172,7 @@ func GetTransaction(transactionId string) (*Transaction, error) {
 func GetRecentTransactions(sendersAddress string) ([]*Transaction, error) {
 	query := `
 		SELECT
-			transaction_id,
+			transaction_code,
 			senders_username,
 			senders_phone,
 			senders_wallet_address,
@@ -174,7 +200,7 @@ func GetRecentTransactions(sendersAddress string) ([]*Transaction, error) {
 		var t Transaction
 
 		err := rows.Scan(
-			&t.TransactionId,
+			&t.TransactionCode,
 			&t.Sender.Username,
 			&t.Sender.Phone,
 			&t.Sender.Address,
@@ -198,10 +224,10 @@ func GetRecentTransactions(sendersAddress string) ([]*Transaction, error) {
 }
 
 type RequestFundsResult struct {
-	TransactionId string  `json:"transaction_id"`
-	Sender        string  `json:"sender"`
-	Receiver      string  `json:"receiver"`
-	Amount        float64 `json:"amount"`
+	TransactionCode string  `json:"transaction_code"`
+	Sender          string  `json:"sender"`
+	Receiver        string  `json:"receiver"`
+	Amount          float64 `json:"amount"`
 
 	// Time when transaction was initiated by client
 	Timestamp   string `json:"timestamp"`
@@ -218,19 +244,21 @@ func CreateRequestFunds(
 	timestamp, signature string,
 	publicKeyHash string,
 ) (*RequestFundsResult, error) {
+	transactionCode := "RX" + generateTransactionCode()
+
 	t := RequestFundsResult{
-		TransactionId: generateTransactionId(),
-		Sender:        sender,
-		Receiver:      receiver,
-		Amount:        amount,
-		Timestamp:     timestamp,
-		Signature:     signature,
-		PublicKeyId:   publicKeyHash,
+		TransactionCode: transactionCode,
+		Sender:          sender,
+		Receiver:        receiver,
+		Amount:          amount,
+		Timestamp:       timestamp,
+		Signature:       signature,
+		PublicKeyId:     publicKeyHash,
 	}
 
 	query := `
 	INSERT INTO request_funds(
-		transaction_id,
+		transaction_code,
 		sender,
 		receiver,
 		amount,
@@ -240,7 +268,7 @@ func CreateRequestFunds(
 	) VALUES(?, ?, ?, ?, ?, ?, ?)`
 	_, err := db.Exec(
 		query,
-		t.TransactionId,
+		t.TransactionCode,
 		t.Sender,
 		t.Receiver,
 		t.Amount,

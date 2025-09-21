@@ -45,6 +45,19 @@ func createWallet(serverUrl string, user User) (*database.Wallet, error) {
 	return &wallet, err
 }
 
+func freezeWallet(serverUrl string, user User, walletAddress string) error {
+	requireLogin(user, serverUrl)
+
+	url := serverUrl + fmt.Sprintf("/wallets/%v/freeze", walletAddress)
+	resp, err := http.Post(url, jsonContentType, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	return nil
+}
+
 func TestCreateWallet(t *testing.T) {
 	testServer := httptest.NewServer(r)
 	defer testServer.Close()
@@ -164,24 +177,6 @@ func TestGetWallet(t *testing.T) {
 	}
 }
 
-func getUsersWallet(
-	serverUrl string,
-	user User,
-	filter func(database.Wallet) bool,
-) (*database.Wallet, error) {
-	requireLogin(user, serverUrl)
-
-	wallets, err := getAllWallets(serverUrl, filter)
-	if err != nil {
-		return nil, err
-	}
-	wallet := randomChoice(wallets)
-	if wallet == nil {
-		return nil, fmt.Errorf("no wallets found")
-	}
-	return wallet, nil
-}
-
 func TestFreezeWallet(t *testing.T) {
 	testServer := httptest.NewServer(r)
 	defer testServer.Close()
@@ -199,25 +194,17 @@ func TestFreezeWallet(t *testing.T) {
 	}
 
 	// Freeze tommys wallet
-	requireLogin(tommy, testServer.URL)
-
-	log.Printf("Freezing wallet %v\n", tommysWallet.Address)
-
-	url := testServer.URL + fmt.Sprintf("/wallets/%v/freeze", tommysWallet.Address)
-	resp, err := http.Post(url, jsonContentType, nil)
+	err = freezeWallet(testServer.URL, tommy, tommysWallet.Address)
 	if err != nil {
-		t.Fatalf("Error making request; %v\n", err)
+		t.Fatalf("Error freezing user's wallet; %v\n", err)
 	}
-
-	expectStatus(t, resp, http.StatusOK)
-	resp.Body.Close()
 
 	// Test: Attempt to send money using frozen wallet
 	// NOTE: If test fails please ensure you have created the verifyTransaction TRIGGER
 	// in your database. Check database/sql/transactions.sql file for TRIGGER value
 	frozenWallet := tommysWallet
 
-	resp, err = transferFunds(
+	resp, err := transferFunds(
 		testServer.URL,
 		frozenWallet.Address,
 		leesWallet.Address,
@@ -252,26 +239,20 @@ func TestActivateWallet(t *testing.T) {
 	testServer := httptest.NewServer(r)
 	defer testServer.Close()
 
-	// Fetch one of tommy's frozen wallets
-	tommysWallet, err := getUsersWallet(
-		testServer.URL,
-		tommy,
-		func(wallet database.Wallet) bool {
-			return !wallet.IsActive
-		},
-	)
+	// Create wallet
+	tommysWallet, err := createWallet(testServer.URL, tommy)
 	if err != nil {
 		t.Fatalf("Error fetching user's wallet; %v", err)
 	}
 
+	// Freeze tommy's wallet
+	err = freezeWallet(testServer.URL, tommy, tommysWallet.Address)
+	if err != nil {
+		t.Fatalf("Error freezing user's wallet; %v", err)
+	}
+
 	// Fetch one of lee's active wallets
-	leesWallet, err := getUsersWallet(
-		testServer.URL,
-		lee,
-		func(wallet database.Wallet) bool {
-			return wallet.IsActive
-		},
-	)
+	leesWallet, err := createWallet(testServer.URL, lee)
 	if err != nil {
 		t.Fatalf("Error fetching user's wallet; %v", err)
 	}

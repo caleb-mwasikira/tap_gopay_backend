@@ -16,7 +16,6 @@ import (
 	"github.com/caleb-mwasikira/tap_gopay_backend/database"
 	"github.com/caleb-mwasikira/tap_gopay_backend/encrypt"
 	"github.com/go-chi/chi/v5"
-	"github.com/nyaruka/phonenumbers"
 )
 
 type TransactionRequest struct {
@@ -39,13 +38,8 @@ func (req TransactionRequest) Hash() []byte {
 }
 
 func getWalletOwnedBy(phone string) (*database.Wallet, error) {
-	phoneNumber, err := phonenumbers.Parse(phone, "KE")
-	if err != nil {
-		return nil, err
-	}
-
 	wallets, err := database.GetAllWalletsOwnedBy(
-		phoneNumber.String(),
+		phone,
 		func(wallet *database.Wallet) bool {
 			return wallet.IsActive
 		},
@@ -57,6 +51,8 @@ func getWalletOwnedBy(phone string) (*database.Wallet, error) {
 	if len(wallets) == 0 {
 		return nil, fmt.Errorf("no wallets found owned by phone number")
 	}
+
+	// TODO: Return wallet that hasn't exceeded its spending limits
 
 	return wallets[0], nil
 }
@@ -161,6 +157,7 @@ func TransferFunds(w http.ResponseWriter, r *http.Request) {
 	}
 
 	transaction, err := database.CreateTransaction(
+		user.Id,
 		req.Sender, req.Receiver,
 		req.Amount, req.Fee,
 		req.Timestamp, req.Signature,
@@ -237,10 +234,10 @@ func RequestFunds(w http.ResponseWriter, r *http.Request) {
 }
 
 func GetTransaction(w http.ResponseWriter, r *http.Request) {
-	transactionId := chi.URLParam(r, "transaction_id")
-	transactionId = strings.TrimSpace(transactionId)
+	transactionCode := chi.URLParam(r, "transaction_code")
+	transactionCode = strings.TrimSpace(transactionCode)
 
-	if len(transactionId) < database.TRANSACTION_ID_LEN {
+	if len(transactionCode) < database.TRANSACTION_ID_LEN {
 		api.BadRequest(w, "Invalid transaction id", nil)
 		return
 	}
@@ -256,7 +253,7 @@ func GetTransaction(w http.ResponseWriter, r *http.Request) {
 	// May the heavens keep this codebase safe. And may it NEVER come back
 	// to bite me in the a**
 
-	t, err := database.GetTransaction(transactionId)
+	t, err := database.GetTransaction(transactionCode)
 	if err != nil {
 		api.Errorf(w, "Error fetching transaction", err)
 		return

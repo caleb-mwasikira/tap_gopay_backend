@@ -1,6 +1,8 @@
 package database
 
-import "github.com/nyaruka/phonenumbers"
+import (
+	"github.com/nyaruka/phonenumbers"
+)
 
 type Wallet struct {
 	UserId         int     `json:"user_id"`
@@ -19,30 +21,52 @@ func CreateWallet(
 	walletAddress string,
 	walletName string,
 	amount float64,
+	requiredSignatures uint,
 ) (*Wallet, error) {
+	tx, err := db.Begin()
+	if err != nil {
+		return nil, err
+	}
+
 	query := `
 		INSERT INTO wallets(
-			user_id,
 			wallet_address,
 			wallet_name,
-			initial_deposit
+			initial_deposit,
+			required_signatures
 		) VALUES(?, ?, ?, ?)`
-	_, err := db.Exec(
+	_, err = tx.Exec(
 		query,
-		userId,
 		walletAddress,
 		walletName,
 		amount,
+		requiredSignatures,
 	)
 	if err != nil {
 		return nil, err
 	}
+
+	// Add owner in wallet_owners table
+	query = `
+		INSERT INTO wallet_owners(wallet_address, user_id)
+		VALUES(?, ?)
+	`
+	_, err = tx.Exec(query, walletAddress, userId)
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+
 	return GetWalletDetails(userId, walletAddress)
 }
 
 func WalletExists(userId int, walletAddress string) bool {
 	var exists bool
-	query := "SELECT EXISTS(SELECT 1 FROM wallets WHERE user_id= ? AND wallet_address= ?)"
+	query := "SELECT EXISTS(SELECT 1 FROM wallet_owners WHERE user_id= ? AND wallet_address= ?)"
 
 	row := db.QueryRow(query, userId, walletAddress)
 	err := row.Scan(&exists)
@@ -180,14 +204,40 @@ func GetAllWallets(userId int) ([]*Wallet, error) {
 	return wallets, nil
 }
 
+func ownsWallet(userId int, walletAddress string) bool {
+	var exists bool
+
+	query := "SELECT EXISTS(SELECT 1 FROM wallet_owners WHERE user_id= ? AND wallet_address= ?)"
+
+	err := db.QueryRow(
+		query,
+		userId,
+		walletAddress,
+	).Scan(&exists)
+	if err != nil {
+		return false
+	}
+	return exists
+}
+
 func FreezeWallet(userId int, walletAddress string) error {
-	query := "UPDATE wallets SET is_active= 0 WHERE user_id= ? AND wallet_address= ?"
-	_, err := db.Exec(query, userId, walletAddress)
+	var err error
+
+	if ownsWallet(userId, walletAddress) {
+		query := "UPDATE wallets SET is_active= 0 WHERE wallet_address= ?"
+		_, err = db.Exec(query, walletAddress)
+	}
+
 	return err
 }
 
 func ActivateWallet(userId int, walletAddress string) error {
-	query := "UPDATE wallets SET is_active= 1 WHERE user_id= ? AND wallet_address= ?"
-	_, err := db.Exec(query, userId, walletAddress)
+	var err error
+
+	if ownsWallet(userId, walletAddress) {
+		query := "UPDATE wallets SET is_active= 1 WHERE wallet_address= ?"
+		_, err = db.Exec(query, walletAddress)
+	}
+
 	return err
 }

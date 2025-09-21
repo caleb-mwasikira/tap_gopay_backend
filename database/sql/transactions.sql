@@ -1,16 +1,23 @@
+--
+-- Database: `tap_gopay`
+--
 
-DROP TABLE IF EXISTS `transactions`;
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `transactions`
+--
 
 CREATE TABLE `transactions` (
   `id` bigint NOT NULL,
-  `transaction_id` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
+  `transaction_code` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
   `sender` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
   `receiver` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
   `amount` decimal(10,2) NOT NULL,
   `fee` decimal(10,2) NOT NULL,
   `timestamp` varchar(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
-  `signature` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
-  `public_key_hash` varchar(255) NOT NULL,
+  `signatures_count` tinyint NOT NULL DEFAULT '1',
+  `status` enum('pending','confirmed','rejected') CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT 'pending',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 

@@ -10,7 +10,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/caleb-mwasikira/tap_gopay_backend/database"
 	"github.com/caleb-mwasikira/tap_gopay_backend/handlers"
 )
 
@@ -21,20 +20,9 @@ func TestSetOrUpdateLimit(t *testing.T) {
 	requireLogin(tommy, testServer.URL)
 
 	// Create new wallet, so we can max out its limits
-	resp, err := http.Post(
-		testServer.URL+"/new-wallet", jsonContentType, nil,
-	)
+	tommysWallet, err := createWallet(testServer.URL, tommy)
 	if err != nil {
-		t.Fatalf("Error making request; %v\n", err)
-	}
-
-	body := expectStatus(t, resp, http.StatusOK)
-	resp.Body.Close()
-
-	var tommysWallet database.Wallet
-	err = json.Unmarshal(body, &tommysWallet)
-	if err != nil {
-		t.Fatal("Expected wallet data type but got garbage data")
+		t.Fatalf("Error creating wallet; %v\n", err)
 	}
 
 	// Setup a limit on tommy's wallet
@@ -44,12 +32,12 @@ func TestSetOrUpdateLimit(t *testing.T) {
 		Period: "week",
 		Amount: limit,
 	}
-	body, err = json.Marshal(&req)
+	body, err := json.Marshal(&req)
 	if err != nil {
 		t.Fatalf("Error marshalling request; %v\n", err)
 	}
 
-	resp, err = http.Post(
+	resp, err := http.Post(
 		testServer.URL+fmt.Sprintf("/wallets/%v/limit", tommysWallet.Address),
 		jsonContentType,
 		bytes.NewBuffer(body),
@@ -62,13 +50,7 @@ func TestSetOrUpdateLimit(t *testing.T) {
 	resp.Body.Close()
 
 	// Get one-of lee's wallets
-	leesWallet, err := getUsersWallet(
-		testServer.URL,
-		lee,
-		func(wallet database.Wallet) bool {
-			return wallet.IsActive
-		},
-	)
+	leesWallet, err := createWallet(testServer.URL, lee)
 	if err != nil {
 		t.Fatalf("Error fetching user's wallets; %v\n", err)
 	}
