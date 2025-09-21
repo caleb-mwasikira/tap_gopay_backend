@@ -65,7 +65,7 @@ func CreateTransaction(
 	timestamp, signature string,
 	publicKeyHash string,
 ) (*Transaction, error) {
-	transactionCode := "TX" + generateTransactionCode()
+	transactionCode := "TX-" + generateTransactionCode()
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -244,7 +244,7 @@ func CreateRequestFunds(
 	timestamp, signature string,
 	publicKeyHash string,
 ) (*RequestFundsResult, error) {
-	transactionCode := "RX" + generateTransactionCode()
+	transactionCode := "RX-" + generateTransactionCode()
 
 	t := RequestFundsResult{
 		TransactionCode: transactionCode,

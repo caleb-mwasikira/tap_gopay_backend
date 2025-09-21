@@ -32,7 +32,7 @@ func GetRoutes() *chi.Mux {
 		r.Group(func(r chi.Router) {
 			r.Use(RequireAuthMiddleware)
 
-			r.HandleFunc("/ws-notifications", wsNotifyReceivedFunds)
+			r.HandleFunc("/subscribe-notifications", SubscribeNotifications)
 			r.Post("/new-wallet", CreateWallet)
 			r.Get("/wallets", GetAllWallets)
 			r.Get("/wallets/{wallet_address}", GetWalletDetails)

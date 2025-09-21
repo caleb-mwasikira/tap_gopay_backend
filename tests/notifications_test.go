@@ -30,7 +30,7 @@ func waitForNotifications(
 	}
 
 	// Establish WebSocket connection
-	rawUrl := "ws://" + u.Host + "/ws-notifications"
+	rawUrl := "ws://" + u.Host + "/subscribe-notifications"
 	header := http.Header{}
 	header.Add("AuthToken", fmt.Sprintf("Bearer %v", accessToken))
 
@@ -58,7 +58,7 @@ func waitForNotifications(
 	}
 }
 
-func TestWsNotifyReceivedFunds(t *testing.T) {
+func TestSubscribeNotifications(t *testing.T) {
 	testServer := httptest.NewServer(r)
 	defer testServer.Close()
 
@@ -113,7 +113,7 @@ func TestWsNotifyReceivedFunds(t *testing.T) {
 		cancel()
 		t.Errorf("Tired of waiting for transaction notification")
 
-	case notification := <-notifications:
-		log.Printf("Received transaction notification from server %#v\n", notification)
+	case <-notifications:
+		log.Println("Received transaction notification from server")
 	}
 }

@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 
@@ -168,20 +167,7 @@ func TransferFunds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go func(transaction database.Transaction) {
-		mutex.RLock()
-		conn, ok := clients[transaction.Receiver.Address]
-		mutex.RUnlock()
-
-		if ok {
-			// Notify receiver of received funds
-			err := conn.WriteJSON(&transaction)
-			if err != nil {
-				log.Printf("Error notifying receiver of received funds")
-			}
-		}
-
-	}(*transaction)
+	go notifyInterestedParties(*transaction)
 
 	api.OK2(w, transaction)
 }

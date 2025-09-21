@@ -1,6 +1,9 @@
 package database
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/nyaruka/phonenumbers"
 )
 
@@ -240,4 +243,37 @@ func ActivateWallet(userId int, walletAddress string) error {
 	}
 
 	return err
+}
+
+// Returns the user id's of users owning provided wallet addresses
+func GetWalletOwners(walletAddresses ...string) ([]int, error) {
+	if len(walletAddresses) == 0 {
+		return []int{}, nil
+	}
+
+	// Build placeholders
+	placeholders := strings.Repeat("?,", len(walletAddresses))
+	placeholders = placeholders[:len(placeholders)-1] // remove last comma
+
+	owners := []int{}
+	query := fmt.Sprintf("SELECT user_id FROM wallet_owners WHERE wallet_address IN (%s)", placeholders)
+
+	args := make([]any, len(walletAddresses))
+	for i, walletAddr := range walletAddresses {
+		args[i] = walletAddr
+	}
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	for rows.Next() {
+		var owner int
+		if err = rows.Scan(&owner); err != nil {
+			return nil, err
+		}
+		owners = append(owners, owner)
+	}
+	return owners, nil
 }
