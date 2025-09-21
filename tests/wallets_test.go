@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -12,23 +13,35 @@ import (
 	"testing"
 
 	"github.com/caleb-mwasikira/tap_gopay_backend/database"
+	"github.com/caleb-mwasikira/tap_gopay_backend/handlers"
 	"github.com/nyaruka/phonenumbers"
 )
 
 func createWallet(serverUrl string, user User) (*database.Wallet, error) {
 	requireLogin(user, serverUrl)
 
+	req := handlers.CreateWalletRequest{
+		WalletName: user.Username + randomString(6),
+	}
+	body, err := json.Marshal(&req)
+	if err != nil {
+		return nil, err
+	}
+
 	resp, err := http.Post(
-		serverUrl+"/new-wallet", jsonContentType, nil,
+		serverUrl+"/new-wallet", jsonContentType, bytes.NewBuffer(body),
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
+	body = printResponse(resp, http.StatusOK)
+
 	// Check if request body contains created wallet
 	var wallet database.Wallet
-	err = json.NewDecoder(resp.Body).Decode(&wallet)
+
+	err = json.Unmarshal(body, &wallet)
 	return &wallet, err
 }
 
@@ -39,23 +52,9 @@ func TestCreateWallet(t *testing.T) {
 	users := []User{tommy, lee}
 
 	for _, user := range users {
-		requireLogin(user, testServer.URL)
-
-		resp, err := http.Post(
-			testServer.URL+"/new-wallet", jsonContentType, nil,
-		)
+		_, err := createWallet(testServer.URL, user)
 		if err != nil {
 			t.Fatalf("Error making request; %v\n", err)
-		}
-		defer resp.Body.Close()
-
-		body := expectStatus(t, resp, http.StatusOK)
-
-		// Check if request body contains created wallet
-		var wallet database.Wallet
-		err = json.Unmarshal(body, &wallet)
-		if err != nil {
-			t.Fatalf("Expected response body to be Wallet but got garbage data")
 		}
 	}
 }
@@ -341,23 +340,9 @@ func TestGetWalletsOwnedBy(t *testing.T) {
 	resp.Body.Close()
 
 	// Create wallet for random user
-	requireLogin(user, testServer.URL)
-
-	resp, err = http.Post(
-		testServer.URL+"/new-wallet", jsonContentType, nil,
-	)
+	originalWallet, err := createWallet(testServer.URL, user)
 	if err != nil {
 		t.Fatalf("Error making request; %v\n", err)
-	}
-	defer resp.Body.Close()
-
-	body := expectStatus(t, resp, http.StatusOK)
-
-	// Check if request body contains created wallet
-	var originalWallet database.Wallet
-	err = json.Unmarshal(body, &originalWallet)
-	if err != nil {
-		t.Fatalf("Expected response body to be Wallet but got garbage data")
 	}
 
 	// Get wallet tied to user's phone number

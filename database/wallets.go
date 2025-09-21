@@ -7,18 +7,31 @@ type Wallet struct {
 	Username       string  `json:"username"`
 	Phone          string  `json:"phone_no"`
 	Address        string  `json:"wallet_address"`
+	Name           string  `json:"wallet_name"`
 	InitialDeposit float64 `json:"initial_deposit"`
 	IsActive       bool    `json:"is_active"`
 	CreatedAt      string  `json:"created_at"`
 	Balance        float64 `json:"balance"`
 }
 
-func CreateWallet(userId int, walletAddress string, amount float64) (*Wallet, error) {
-	query := "INSERT INTO wallets(user_id, wallet_address, initial_deposit) VALUES(?, ?, ?)"
+func CreateWallet(
+	userId int,
+	walletAddress string,
+	walletName string,
+	amount float64,
+) (*Wallet, error) {
+	query := `
+		INSERT INTO wallets(
+			user_id,
+			wallet_address,
+			wallet_name,
+			initial_deposit
+		) VALUES(?, ?, ?, ?)`
 	_, err := db.Exec(
 		query,
 		userId,
 		walletAddress,
+		walletName,
 		amount,
 	)
 	if err != nil {
@@ -46,7 +59,13 @@ func GetWalletDetails(userId int, walletAddress string) (*Wallet, error) {
 	}
 
 	query := `
-		SELECT username, phone_no, is_active, created_at, balance
+		SELECT
+			username,
+			phone_no,
+			wallet_name,
+			is_active,
+			created_at,
+			balance
 		FROM wallet_details
 		WHERE user_id= ? AND wallet_address= ?
 	`
@@ -54,6 +73,7 @@ func GetWalletDetails(userId int, walletAddress string) (*Wallet, error) {
 	err := row.Scan(
 		&wallet.Username,
 		&wallet.Phone,
+		&wallet.Name,
 		&wallet.IsActive,
 		&wallet.CreatedAt,
 		&wallet.Balance,
@@ -69,7 +89,14 @@ func GetAllWalletsOwnedBy(phone string, filter func(*Wallet) bool) ([]*Wallet, e
 	phone = phonenumbers.Format(num, phonenumbers.INTERNATIONAL)
 
 	query := `
-		SELECT user_id, username, wallet_address, is_active, created_at, balance
+		SELECT
+			user_id,
+			username,
+			wallet_address,
+			wallet_name,
+			is_active,
+			created_at,
+			balance
 		FROM wallet_details
 		WHERE phone_no= ?
 	`
@@ -88,6 +115,7 @@ func GetAllWalletsOwnedBy(phone string, filter func(*Wallet) bool) ([]*Wallet, e
 			&wallet.UserId,
 			&wallet.Username,
 			&wallet.Address,
+			&wallet.Name,
 			&wallet.IsActive,
 			&wallet.CreatedAt,
 			&wallet.Balance,
@@ -115,6 +143,7 @@ func GetAllWallets(userId int) ([]*Wallet, error) {
 			username,
 			phone_no,
 			wallet_address,
+			wallet_name,
 			initial_deposit,
 			is_active,
 			created_at,
@@ -137,6 +166,7 @@ func GetAllWallets(userId int) ([]*Wallet, error) {
 			&wallet.Username,
 			&wallet.Phone,
 			&wallet.Address,
+			&wallet.Name,
 			&wallet.InitialDeposit,
 			&wallet.IsActive,
 			&wallet.CreatedAt,

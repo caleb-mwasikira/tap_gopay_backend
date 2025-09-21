@@ -37,6 +37,10 @@ func generateWalletAddress() string {
 	return strings.TrimSpace(walletAddress)
 }
 
+type CreateWalletRequest struct {
+	WalletName string `json:"wallet_name" validate:"min=5"`
+}
+
 func CreateWallet(w http.ResponseWriter, r *http.Request) {
 	user, ok := getAuthUser(r)
 	if !ok {
@@ -44,9 +48,25 @@ func CreateWallet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var req CreateWalletRequest
+
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		api.BadRequest(w, "Error parsing request body", err)
+		return
+	}
+
+	if err = validateStruct(req); err != nil {
+		api.BadRequest(w, err.Error(), nil)
+		return
+	}
+
 	walletAddress := generateWalletAddress()
 	wallet, err := database.CreateWallet(
-		user.Id, walletAddress, INITIAL_DEPOSIT,
+		user.Id,
+		walletAddress,
+		req.WalletName,
+		INITIAL_DEPOSIT,
 	)
 	if err != nil {
 		api.Errorf(w, "Error creating wallet", err)

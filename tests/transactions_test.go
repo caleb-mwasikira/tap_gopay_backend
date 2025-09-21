@@ -243,9 +243,7 @@ func waitForNotifications(
 
 	conn, resp, err := websocket.DefaultDialer.Dial(rawUrl, header)
 	if err != nil {
-		if resp != nil {
-			printResponse(resp, COLOR_RED)
-		}
+		printResponse(resp, http.StatusOK)
 		return err
 	}
 	defer conn.Close()
