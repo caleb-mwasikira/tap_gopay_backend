@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/caleb-mwasikira/tap_gopay_backend/api"
@@ -220,6 +221,12 @@ func RequestFunds(w http.ResponseWriter, r *http.Request) {
 }
 
 func GetTransaction(w http.ResponseWriter, r *http.Request) {
+	user, ok := getAuthUser(r)
+	if !ok {
+		api.Unauthorized(w, "Access to this route requires user login")
+		return
+	}
+
 	transactionCode := chi.URLParam(r, "transaction_code")
 	transactionCode = strings.TrimSpace(transactionCode)
 
@@ -228,20 +235,23 @@ func GetTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// I realize that in order to do authorization here,
-	// we would have to check if the currently logged in user
-	// was involved in the transaction; as a sender or receiver.
-	// This will involve multiple database searches and JOINS.
-	// Which i am currently not willing to do.
-	// So i will effective immediately turn a blind eye to this 🙈.
-	// I will rely on the fact that transaction Ids are difficult to guess -
-	// as my shield of security.
-	// May the heavens keep this codebase safe. And may it NEVER come back
-	// to bite me in the a**
-
 	t, err := database.GetTransaction(transactionCode)
 	if err != nil {
 		api.Errorf(w, "Error fetching transaction", err)
+		return
+	}
+
+	// Get involved parties
+	involvedParties, err := database.GetWalletOwners(t.Sender.Address, t.Receiver.Address)
+	if err != nil {
+		api.Errorf(w, "Error fetching involved parties in transaction", err)
+		return
+	}
+
+	// A user is authorized to view transaction details
+	// if they are among involved parties
+	if !slices.Contains(involvedParties, user.Id) {
+		api.Unauthorized(w, "You are not authorized to view transaction details")
 		return
 	}
 
