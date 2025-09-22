@@ -38,7 +38,7 @@ func TestSetOrUpdateLimit(t *testing.T) {
 	}
 
 	resp, err := http.Post(
-		testServer.URL+fmt.Sprintf("/wallets/%v/limit", tommysWallet.Address),
+		testServer.URL+fmt.Sprintf("/wallets/%v/limit", tommysWallet.WalletAddress),
 		jsonContentType,
 		bytes.NewBuffer(body),
 	)
@@ -56,13 +56,11 @@ func TestSetOrUpdateLimit(t *testing.T) {
 	}
 
 	// Test spending limit worked by sending amount > limit
-	requireLogin(tommy, testServer.URL)
-
-	resp, err = transferFunds(
+	resp, err = sendMoney(
 		testServer.URL,
-		tommysWallet.Address,
-		leesWallet.Address,
-		fmt.Sprintf("%v.key", tommy.Email),
+		tommysWallet.WalletAddress,
+		leesWallet.WalletAddress,
+		tommy,
 		limit*2,
 	)
 	if err != nil {
@@ -78,11 +76,11 @@ func TestSetOrUpdateLimit(t *testing.T) {
 	for range 10 {
 		amount := 1 + rand.IntN(5)
 
-		resp, err = transferFunds(
+		resp, err = sendMoney(
 			testServer.URL,
-			tommysWallet.Address,
-			leesWallet.Address,
-			fmt.Sprintf("%v.key", tommy.Email),
+			tommysWallet.WalletAddress,
+			leesWallet.WalletAddress,
+			tommy,
 			float64(amount),
 		)
 		if err != nil {

@@ -191,7 +191,7 @@ func validatePublicKey(pubKey string) error {
 		return err
 	}
 
-	_, err = encrypt.LoadPublicKeyFromBytes(pubKeyBytes)
+	_, err = encrypt.PemDecodePublicKey(pubKeyBytes)
 	return err
 }
 
@@ -211,27 +211,35 @@ func isBase64Encoded(value string) bool {
 	return err == nil
 }
 
+func isDigitsOnly(s string) bool {
+	for _, char := range s {
+		if !unicode.IsDigit(char) {
+			return false
+		}
+	}
+	return true
+}
+
 // Wallet address will be in the format
 //
-//	1234 5678 8765 5432 or 1234567887655432
+//	"0xwall" for inidividual wallets
+//	"0xmult" for multi signature wallets
+//	"0xp00l" for cash pools
 func validateWalletAddress(walletAddress string) error {
 	walletAddress = strings.TrimSpace(walletAddress)
 	if walletAddress == "" {
 		return fmt.Errorf("wallet address cannot be empty")
 	}
 
-	walletAddress = strings.ReplaceAll(walletAddress, " ", "")
-
-	if len(walletAddress) < MIN_WALLET_ADDR_LEN {
-		return fmt.Errorf("wallet address number too short")
+	fields := strings.Split(walletAddress, " ")
+	if len(fields) < 3 {
+		return fmt.Errorf("invalid wallet address")
 	}
 
-	// Check that wallet address is made up of digits only
-	for _, char := range walletAddress {
-		isDigit := unicode.IsDigit(char)
-		if !isDigit {
-			return fmt.Errorf("wallet address must be made up of digits only")
-		}
+	// Ensure wallet is made of digits only
+	walletAddress = strings.ReplaceAll(walletAddress, " ", "")
+	if !isDigitsOnly(walletAddress) {
+		return fmt.Errorf("expected numeric wallet address")
 	}
 
 	return nil

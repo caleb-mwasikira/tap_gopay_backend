@@ -110,7 +110,7 @@ func LoadPrivateKeyFromFile(path string) (*ecdsa.PrivateKey, error) {
 	return x509.ParseECPrivateKey(block.Bytes)
 }
 
-func LoadPublicKeyFromBytes(pubKeyBytes []byte) (*ecdsa.PublicKey, error) {
+func PemDecodePublicKey(pubKeyBytes []byte) (*ecdsa.PublicKey, error) {
 	block, _ := pem.Decode(pubKeyBytes)
 	if block == nil || block.Type != "EC PUBLIC KEY" {
 		return nil, ErrUnsupportedPublicKey

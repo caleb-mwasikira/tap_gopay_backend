@@ -1,8 +1,11 @@
 package database
 
 import (
+	"crypto/ecdsa"
 	"crypto/sha256"
 	"encoding/base64"
+
+	"github.com/caleb-mwasikira/tap_gopay_backend/encrypt"
 )
 
 func getPubKeyHash(b64EncodedPubKey string) (string, error) {
@@ -35,9 +38,9 @@ func CreatePublicKey(email string, b64EncodedPubKey string) error {
 	return err
 }
 
-func GetPublicKey(email, pubKeyHash string) ([]byte, error) {
+func GetPublicKey(email, b64EncodedPubKeyHash string) (*ecdsa.PublicKey, error) {
 	query := "SELECT public_key FROM public_keys WHERE email= ? AND public_key_hash= ?"
-	row := db.QueryRow(query, email, pubKeyHash)
+	row := db.QueryRow(query, email, b64EncodedPubKeyHash)
 
 	var b64EncodedPubKey string
 
@@ -46,7 +49,12 @@ func GetPublicKey(email, pubKeyHash string) ([]byte, error) {
 		return nil, err
 	}
 
-	return base64.StdEncoding.DecodeString(b64EncodedPubKey)
+	pubKeyBytes, err := base64.StdEncoding.DecodeString(b64EncodedPubKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return encrypt.PemDecodePublicKey(pubKeyBytes)
 }
 
 func ChangePublicKey(email string, b64EncodedPubKey string) error {

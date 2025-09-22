@@ -3,9 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"math/rand/v2"
 	"net/http"
-	"strings"
 
 	"github.com/caleb-mwasikira/tap_gopay_backend/api"
 	"github.com/caleb-mwasikira/tap_gopay_backend/database"
@@ -13,32 +11,16 @@ import (
 )
 
 const (
-	MIN_WALLET_ADDR_LEN int     = 16
-	INITIAL_DEPOSIT     float64 = 100
+	INITIAL_DEPOSIT float64 = 100
 )
 
-// Wallet address will be in the format
-//
-//	1234 5678 8765 5432
-func generateWalletAddress() string {
-	str := strings.Builder{}
-	index := 0
-
-	for range MIN_WALLET_ADDR_LEN {
-		if index != 0 && (index%4) == 0 {
-			str.WriteString(" ")
-		}
-
-		num := rand.IntN(10)
-		str.WriteString(fmt.Sprintf("%d", num))
-		index++
-	}
-	walletAddress := str.String()
-	return strings.TrimSpace(walletAddress)
-}
-
 type CreateWalletRequest struct {
-	WalletName string `json:"wallet_name" validate:"min=5"`
+	WalletName string `json:"wallet_name" validate:"min=4"`
+
+	TotalOwners uint `json:"total_owners" validate:"min=1,max=10"`
+
+	// Number of signatures required for wallet to complete transaction
+	NumSignatures uint `json:"num_signatures" validate:"min=1,max=10"`
 }
 
 func CreateWallet(w http.ResponseWriter, r *http.Request) {
@@ -61,13 +43,17 @@ func CreateWallet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	walletAddress := generateWalletAddress()
+	if req.NumSignatures > req.TotalOwners {
+		api.BadRequest(w, "Number of signatures required cannot exceed total number of owners", nil)
+		return
+	}
+
 	wallet, err := database.CreateWallet(
 		user.Id,
-		walletAddress,
 		req.WalletName,
 		INITIAL_DEPOSIT,
-		1,
+		req.TotalOwners,
+		req.NumSignatures,
 	)
 	if err != nil {
 		api.Errorf(w, "Error creating wallet", err)
@@ -94,7 +80,7 @@ func GetAllWallets(w http.ResponseWriter, r *http.Request) {
 	api.OK2(w, wallets)
 }
 
-func GetWalletDetails(w http.ResponseWriter, r *http.Request) {
+func GetWallet(w http.ResponseWriter, r *http.Request) {
 	user, ok := getAuthUser(r)
 	if !ok {
 		api.Unauthorized(w, "Access to this route requires user login")
@@ -107,13 +93,45 @@ func GetWalletDetails(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	wallet, err := database.GetWalletDetails(user.Id, walletAddress)
+	wallet, err := database.GetWallet(user.Id, walletAddress)
 	if err != nil {
 		api.Errorf(w, "Error fetching wallet details", err)
 		return
 	}
 
 	api.OK2(w, wallet)
+}
+
+type PhoneNoRequest struct {
+	PhoneNo string `json:"phone_no" validate:"phone_no"`
+}
+
+func GetWalletsOwnedByPhoneNo(w http.ResponseWriter, r *http.Request) {
+	var req PhoneNoRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		api.BadRequest(w, "Error parsing request body", err)
+		return
+	}
+
+	if err = validateStruct(req); err != nil {
+		api.BadRequest(w, err.Error(), nil)
+		return
+	}
+
+	wallets, err := database.GetWalletsOwnedByPhoneNo(
+		req.PhoneNo,
+		func(wallet *database.Wallet) bool {
+			return wallet.IsActive
+		},
+	)
+	if err != nil || len(wallets) == 0 {
+		message := fmt.Sprintf("Error fetching wallets owned by '%v'", req.PhoneNo)
+		api.Errorf(w, message, nil)
+		return
+	}
+
+	api.OK2(w, wallets)
 }
 
 func FreezeWallet(w http.ResponseWriter, r *http.Request) {
@@ -198,4 +216,109 @@ func SetOrUpdateLimit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	api.OK(w, "Successfully setup new spending limit")
+}
+
+// A user can add a wallet owner by providing the
+// counterparts email or phone number
+type WalletOwnerRequest struct {
+	Email   string `json:"email"`
+	PhoneNo string `json:"phone_no"`
+}
+
+func AddWalletOwner(w http.ResponseWriter, r *http.Request) {
+	loggedInUser, ok := getAuthUser(r)
+	if !ok {
+		api.Unauthorized(w, "Access to this route requires user login")
+		return
+	}
+
+	var req WalletOwnerRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		api.BadRequest(w, "Error parsing request body", err)
+		return
+	}
+
+	walletAddress := chi.URLParam(r, "wallet_address")
+
+	err = validateWalletAddress(walletAddress)
+	if err != nil {
+		api.BadRequest(w, err.Error(), nil)
+		return
+	}
+
+	isValidEmail := validateEmail(req.Email) == nil
+	isValidPhoneNo := validatePhoneNumber(req.PhoneNo) == nil
+
+	if !isValidEmail && !isValidPhoneNo {
+		api.BadRequest(w, "Please enter a valid email or phone number", nil)
+		return
+	}
+
+	// Fetch id of user to add
+	newUser, err := database.GetUserByEmailOrPhoneNo(req.Email, req.PhoneNo)
+	if err != nil {
+		message := fmt.Sprintf("User '%v' or '%v' not found", req.Email, req.PhoneNo)
+		api.NotFound(w, message)
+		return
+	}
+
+	err = database.AddWalletOwner(loggedInUser.Id, newUser.Id, walletAddress)
+	if err != nil {
+		api.Errorf(w, "Error adding wallet owner", err)
+		return
+	}
+
+	message := fmt.Sprintf("User '%v' or '%v' added as owner of wallet '%v'",
+		req.Email, req.PhoneNo, walletAddress)
+	api.OK(w, message)
+}
+
+func RemoveWalletOwner(w http.ResponseWriter, r *http.Request) {
+	loggedInUser, ok := getAuthUser(r)
+	if !ok {
+		api.Unauthorized(w, "Access to this route requires user login")
+		return
+	}
+
+	var req WalletOwnerRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		api.BadRequest(w, "Error parsing request body", err)
+		return
+	}
+
+	walletAddress := chi.URLParam(r, "wallet_address")
+
+	err = validateWalletAddress(walletAddress)
+	if err != nil {
+		api.BadRequest(w, err.Error(), nil)
+		return
+	}
+
+	isValidEmail := validateEmail(req.Email) == nil
+	isValidPhoneNo := validatePhoneNumber(req.PhoneNo) == nil
+
+	if !isValidEmail && !isValidPhoneNo {
+		api.BadRequest(w, "Please enter a valid email or phone number", nil)
+		return
+	}
+
+	// Fetch id of user to remove
+	userToRemove, err := database.GetUserByEmailOrPhoneNo(req.Email, req.PhoneNo)
+	if err != nil {
+		message := fmt.Sprintf("User with email '%v' or phone number '%v' not found", req.Email, req.PhoneNo)
+		api.NotFound(w, message)
+		return
+	}
+
+	err = database.RemoveWalletOwner(loggedInUser.Id, userToRemove.Id, walletAddress)
+	if err != nil {
+		api.Errorf(w, "Error removing wallet owner", err)
+		return
+	}
+
+	message := fmt.Sprintf("User '%v' or '%v' removed as owner of wallet '%v'",
+		req.Email, req.PhoneNo, walletAddress)
+	api.OK(w, message)
 }

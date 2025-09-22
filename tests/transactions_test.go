@@ -20,27 +20,42 @@ import (
 	"github.com/caleb-mwasikira/tap_gopay_backend/handlers"
 )
 
-func getTransactionFee(serverUrl string, amount float64) (float64, error) {
-	resp, err := http.Get(serverUrl + fmt.Sprintf("/transaction-fees?amount=%.2f", amount))
+// Signs data using user's private key loaded from file.
+// Returns signature, a hash of the public key to verify signature and
+// an error is any exists
+func signPayload(email string, data []byte) ([]byte, []byte, error) {
+	// Load user's private key from file
+	privKeyPath := filepath.Join("keys", fmt.Sprintf("%v.key", email))
+	privKey, err := encrypt.LoadPrivateKeyFromFile(privKeyPath)
 	if err != nil {
-		return 0, err
+		return nil, nil, err
 	}
 
-	var transactionFee database.TransactionFee
-	err = json.NewDecoder(resp.Body).Decode(&transactionFee)
+	// Sign send funds request
+	signature, err := ecdsa.SignASN1(rand.Reader, privKey, data)
 	if err != nil {
-		return 0, err
+		return nil, nil, err
 	}
 
-	return transactionFee.Fee, nil
+	// Tell server which public key to use to verify signature
+	pubKeyBytes, err := encrypt.PemEncodePublicKey(&privKey.PublicKey)
+	if err != nil {
+		return nil, nil, err
+	}
+	pubKeyHash := sha256.Sum256(pubKeyBytes)
+
+	return signature, pubKeyHash[:], nil
 }
 
-func transferFunds(
+func sendMoney(
 	serverUrl string,
-	sender, receiver string,
-	sendersPrivKeyFilename string,
+	sender string,
+	receiver string,
+	loginUser User,
 	amount float64,
 ) (*http.Response, error) {
+	requireLogin(loginUser, serverUrl)
+
 	fee, err := getTransactionFee(serverUrl, amount)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching transaction fees; %v", err)
@@ -56,28 +71,13 @@ func transferFunds(
 
 	log.Printf("Sending funds from '%v' to '%v'\n", sender, receiver)
 
-	// Load user's private key from file
-	privKeyPath := filepath.Join("keys", sendersPrivKeyFilename)
-	privKey, err := encrypt.LoadPrivateKeyFromFile(privKeyPath)
+	// Sign transaction details
+	signature, pubKeyHash, err := signPayload(loginUser.Email, req.Hash())
 	if err != nil {
-		return nil, err
-	}
-
-	// Sign send funds request
-	digest := req.Hash()
-	signature, err := ecdsa.SignASN1(rand.Reader, privKey, digest)
-	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Error signing data; %v", err)
 	}
 	req.Signature = base64.StdEncoding.EncodeToString(signature)
-
-	// Tell server which public key to use to verify signature
-	pubKeyBytes, err := encrypt.PemEncodePublicKey(&privKey.PublicKey)
-	if err != nil {
-		return nil, err
-	}
-	pubKeyHash := sha256.Sum256(pubKeyBytes)
-	req.PublicKeyHash = base64.StdEncoding.EncodeToString(pubKeyHash[:])
+	req.PublicKeyHash = base64.StdEncoding.EncodeToString(pubKeyHash)
 
 	// Send sends fund request to server
 	body, err := json.Marshal(&req)
@@ -85,10 +85,10 @@ func transferFunds(
 		return nil, err
 	}
 
-	return http.Post(serverUrl+"/transfer-funds", jsonContentType, bytes.NewBuffer(body))
+	return http.Post(serverUrl+"/send-money", jsonContentType, bytes.NewBuffer(body))
 }
 
-func TestTransferFunds(t *testing.T) {
+func TestSendMoney(t *testing.T) {
 	testServer := httptest.NewServer(r)
 	defer testServer.Close()
 
@@ -103,32 +103,44 @@ func TestTransferFunds(t *testing.T) {
 	}
 
 	// Test: Transfer funds from one wallet to another
-	requireLogin(tommy, testServer.URL)
-
-	resp, err := transferFunds(
+	resp, err := sendMoney(
 		testServer.URL,
-		tommysWallet.Address,
-		leesWallet.Address,
-		fmt.Sprintf("%v.key", tommy.Email),
+		tommysWallet.WalletAddress,
+		leesWallet.WalletAddress,
+		tommy,
 		1,
 	)
 	if err != nil {
-		t.Fatalf("Error making request; %v\n", err)
+		t.Fatalf("Error transferring funds; %v\n", err)
 	}
 
 	expectStatus(t, resp, http.StatusOK)
 	resp.Body.Close()
+}
 
-	// Test: Transfer funds from one phone number to another
-	resp, err = transferFunds(
+func TestSendMoneyViaPhoneNo(t *testing.T) {
+	testServer := httptest.NewServer(r)
+	defer testServer.Close()
+
+	tommysWallet, err := createWallet(testServer.URL, tommy)
+	if err != nil {
+		t.Fatalf("Error fetching users wallet; %v\n", err)
+	}
+
+	leesWallet, err := createWallet(testServer.URL, lee)
+	if err != nil {
+		t.Fatalf("Error fetching users wallet; %v\n", err)
+	}
+
+	resp, err := sendMoney(
 		testServer.URL,
-		tommysWallet.Phone,
-		leesWallet.Phone,
-		fmt.Sprintf("%v.key", tommy.Email),
+		tommysWallet.PhoneNo,
+		leesWallet.PhoneNo,
+		tommy,
 		1,
 	)
 	if err != nil {
-		t.Fatalf("Error making request; %v\n", err)
+		t.Fatalf("Error transferring funds; %v\n", err)
 	}
 	defer resp.Body.Close()
 
@@ -161,7 +173,7 @@ func TestGetRecentTransactions(t *testing.T) {
 	// Get all transactions made by that wallet
 	requireLogin(tommy, testServer.URL)
 
-	_, err = getTransactions(testServer.URL, tommysWallet.Address)
+	_, err = getTransactions(testServer.URL, tommysWallet.WalletAddress)
 	if err != nil {
 		t.Errorf("Error fetching wallet transactions; %v\n", err)
 	}
@@ -180,7 +192,7 @@ func TestGetTransaction(t *testing.T) {
 	}
 
 	// Get all transactions made by tommy's wallet
-	transactions, err := getTransactions(testServer.URL, tommysWallet.Address)
+	transactions, err := getTransactions(testServer.URL, tommysWallet.WalletAddress)
 	if err != nil {
 		t.Fatalf("Error fetching wallet transactions; %v\n", err)
 	}
@@ -223,30 +235,30 @@ func TestSendingInvalidAmount(t *testing.T) {
 	}
 
 	// Test sending amount > INITIAL_DEPOSIT
-	resp, err := transferFunds(
+	resp, err := sendMoney(
 		testServer.URL,
-		tommysWallet.Address,
-		leesWallet.Address,
-		fmt.Sprintf("%v.key", tommy.Email),
+		tommysWallet.WalletAddress,
+		leesWallet.WalletAddress,
+		tommy,
 		handlers.INITIAL_DEPOSIT+1,
 	)
 	if err != nil {
-		t.Fatalf("Error making request; %v\n", err)
+		t.Fatalf("Error transferring funds; %v\n", err)
 	}
 	defer resp.Body.Close()
 
 	expectStatus(t, resp, http.StatusInternalServerError)
 
 	// Test sending negative amount
-	resp, err = transferFunds(
+	resp, err = sendMoney(
 		testServer.URL,
-		tommysWallet.Address,
-		leesWallet.Address,
-		fmt.Sprintf("%v.key", tommy.Email),
+		tommysWallet.WalletAddress,
+		leesWallet.WalletAddress,
+		tommy,
 		-10.0,
 	)
 	if err != nil {
-		t.Fatalf("Error making request; %v\n", err)
+		t.Fatalf("Error transferring funds; %v\n", err)
 	}
 	defer resp.Body.Close()
 

@@ -44,8 +44,8 @@ func SubscribeNotifications(w http.ResponseWriter, r *http.Request) {
 // Notifies interested parties of a transaction that has occurred
 func notifyInterestedParties(transaction database.Transaction) {
 	interestedParties, err := database.GetWalletOwners(
-		transaction.Sender.Address,
-		transaction.Receiver.Address,
+		transaction.Sender.WalletAddress,
+		transaction.Receiver.WalletAddress,
 	)
 	if err != nil {
 		log.Printf("Error fetching interested parties; %v\n", err)

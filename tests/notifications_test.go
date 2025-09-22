@@ -91,17 +91,15 @@ func TestSubscribeNotifications(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	// Tommy sends money to lee
-	requireLogin(tommy, testServer.URL)
-
-	resp, err := transferFunds(
+	resp, err := sendMoney(
 		testServer.URL,
-		tommysWallet.Address,
-		leesWallet.Address,
-		fmt.Sprintf("%v.key", tommy.Email),
+		tommysWallet.WalletAddress,
+		leesWallet.WalletAddress,
+		tommy,
 		1,
 	)
 	if err != nil {
-		t.Fatalf("Error making request; %v\n", err)
+		t.Fatalf("Error transferring funds; %v\n", err)
 	}
 
 	expectStatus(t, resp, http.StatusOK)

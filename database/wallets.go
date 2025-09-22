@@ -2,6 +2,7 @@ package database
 
 import (
 	"fmt"
+	"math/rand/v2"
 	"strings"
 
 	"github.com/nyaruka/phonenumbers"
@@ -10,20 +11,53 @@ import (
 type Wallet struct {
 	UserId         int     `json:"user_id"`
 	Username       string  `json:"username"`
-	Phone          string  `json:"phone_no"`
-	Address        string  `json:"wallet_address"`
-	Name           string  `json:"wallet_name"`
+	PhoneNo        string  `json:"phone_no"`
+	WalletAddress  string  `json:"wallet_address"`
+	WalletName     string  `json:"wallet_name"`
 	InitialDeposit float64 `json:"initial_deposit"`
 	IsActive       bool    `json:"is_active"`
 	CreatedAt      string  `json:"created_at"`
 	Balance        float64 `json:"balance"`
 }
 
+type walletType string
+
+const (
+	WALLET_ADDR_LEN int = 12
+
+	individual     walletType = "11"
+	multiSignature walletType = "22"
+	cashPool       walletType = "33"
+)
+
+func generateWalletAddress(walletTyp walletType) string {
+	str := []string{}
+
+	// prefix
+	for _, char := range walletTyp {
+		str = append(str, fmt.Sprintf("%c", char))
+	}
+
+	remainingLength := WALLET_ADDR_LEN - len(walletTyp)
+	numDigits := len(str)
+
+	for range remainingLength {
+		if numDigits%4 == 0 {
+			str = append(str, " ")
+		}
+
+		num := rand.IntN(10)
+		str = append(str, fmt.Sprintf("%d", num))
+		numDigits++
+	}
+	return strings.Join(str, "")
+}
+
 func CreateWallet(
 	userId int,
-	walletAddress string,
 	walletName string,
-	amount float64,
+	initialDeposit float64,
+	totalOwners uint,
 	requiredSignatures uint,
 ) (*Wallet, error) {
 	tx, err := db.Begin()
@@ -31,18 +65,26 @@ func CreateWallet(
 		return nil, err
 	}
 
+	walletTyp := individual
+	if totalOwners > 1 {
+		walletTyp = multiSignature
+	}
+	walletAddress := generateWalletAddress(walletTyp)
+
 	query := `
 		INSERT INTO wallets(
 			wallet_address,
 			wallet_name,
 			initial_deposit,
+			total_owners,
 			required_signatures
-		) VALUES(?, ?, ?, ?)`
+		) VALUES(?, ?, ?, ?, ?)`
 	_, err = tx.Exec(
 		query,
 		walletAddress,
 		walletName,
-		amount,
+		initialDeposit,
+		totalOwners,
 		requiredSignatures,
 	)
 	if err != nil {
@@ -64,7 +106,7 @@ func CreateWallet(
 		return nil, err
 	}
 
-	return GetWalletDetails(userId, walletAddress)
+	return GetWallet(userId, walletAddress)
 }
 
 func WalletExists(userId int, walletAddress string) bool {
@@ -79,10 +121,10 @@ func WalletExists(userId int, walletAddress string) bool {
 	return exists
 }
 
-func GetWalletDetails(userId int, walletAddress string) (*Wallet, error) {
+func GetWallet(userId int, walletAddress string) (*Wallet, error) {
 	wallet := Wallet{
-		UserId:  userId,
-		Address: walletAddress,
+		UserId:        userId,
+		WalletAddress: walletAddress,
 	}
 
 	query := `
@@ -90,6 +132,7 @@ func GetWalletDetails(userId int, walletAddress string) (*Wallet, error) {
 			username,
 			phone_no,
 			wallet_name,
+			initial_deposit,
 			is_active,
 			created_at,
 			balance
@@ -99,8 +142,9 @@ func GetWalletDetails(userId int, walletAddress string) (*Wallet, error) {
 	row := db.QueryRow(query, userId, walletAddress)
 	err := row.Scan(
 		&wallet.Username,
-		&wallet.Phone,
-		&wallet.Name,
+		&wallet.PhoneNo,
+		&wallet.WalletName,
+		&wallet.InitialDeposit,
 		&wallet.IsActive,
 		&wallet.CreatedAt,
 		&wallet.Balance,
@@ -108,7 +152,7 @@ func GetWalletDetails(userId int, walletAddress string) (*Wallet, error) {
 	return &wallet, err
 }
 
-func GetAllWalletsOwnedBy(phone string, filter func(*Wallet) bool) ([]*Wallet, error) {
+func GetWalletsOwnedByPhoneNo(phone string, filter func(*Wallet) bool) ([]*Wallet, error) {
 	num, err := phonenumbers.Parse(phone, "KE")
 	if err != nil {
 		return nil, err
@@ -136,13 +180,13 @@ func GetAllWalletsOwnedBy(phone string, filter func(*Wallet) bool) ([]*Wallet, e
 
 	for rows.Next() {
 		wallet := Wallet{
-			Phone: phone,
+			PhoneNo: phone,
 		}
 		err := rows.Scan(
 			&wallet.UserId,
 			&wallet.Username,
-			&wallet.Address,
-			&wallet.Name,
+			&wallet.WalletAddress,
+			&wallet.WalletName,
 			&wallet.IsActive,
 			&wallet.CreatedAt,
 			&wallet.Balance,
@@ -191,9 +235,9 @@ func GetAllWallets(userId int) ([]*Wallet, error) {
 		}
 		err = rows.Scan(
 			&wallet.Username,
-			&wallet.Phone,
-			&wallet.Address,
-			&wallet.Name,
+			&wallet.PhoneNo,
+			&wallet.WalletAddress,
+			&wallet.WalletName,
 			&wallet.InitialDeposit,
 			&wallet.IsActive,
 			&wallet.CreatedAt,
@@ -276,4 +320,53 @@ func GetWalletOwners(walletAddresses ...string) ([]int, error) {
 		owners = append(owners, owner)
 	}
 	return owners, nil
+}
+
+// Adds user as wallet owner.
+// A user can only be added as a wallet owner by another wallet owner.
+func AddWalletOwner(
+	loggedInUser int,
+	userId int,
+	walletAddress string,
+) error {
+	if !ownsWallet(loggedInUser, walletAddress) {
+		return fmt.Errorf("user does not currently own given wallet address")
+	}
+
+	query := "INSERT INTO wallet_owners(user_id, wallet_address) VALUES(?, ?)"
+	_, err := db.Exec(query, userId, walletAddress)
+	return err
+}
+
+func isOriginalOwner(userId int, walletAddress string) bool {
+	var exists bool
+
+	query := `
+		SELECT EXISTS(
+			SELECT 1 FROM wallet_owners
+			WHERE user_id= ?
+			AND wallet_address= ?
+			AND is_original_owner= TRUE
+		)`
+
+	err := db.QueryRow(
+		query,
+		userId,
+		walletAddress,
+	).Scan(&exists)
+	if err != nil {
+		return false
+	}
+	return exists
+}
+
+func RemoveWalletOwner(loggedInUser int, userId int, walletAddress string) error {
+	// Only original wallet creator can remove wallet owners
+	if !isOriginalOwner(loggedInUser, walletAddress) {
+		return fmt.Errorf("user does not have permission to remove wallet owner")
+	}
+
+	query := "DELETE FROM wallet_owners WHERE user_id= ? AND wallet_address= ?"
+	_, err := db.Exec(query, userId, walletAddress)
+	return err
 }

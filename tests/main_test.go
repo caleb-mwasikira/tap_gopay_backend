@@ -72,7 +72,7 @@ func expectStatus(t *testing.T, resp *http.Response, expectedStatusCode int) []b
 
 	// Check status code
 	if resp.StatusCode != expectedStatusCode {
-		t.Errorf("Expected statusCode %v but got %v\n", expectedStatusCode, resp.StatusCode)
+		t.Fatalf("Expected statusCode %v but got %v\n", expectedStatusCode, resp.StatusCode)
 	}
 
 	return body
@@ -100,18 +100,15 @@ func TestMain(m *testing.M) {
 	testServer := httptest.NewServer(r)
 	defer testServer.Close()
 
-	// Create accounts for tommy and lee
-	resp, err := createAccount(testServer.URL, tommy)
-	if err != nil {
-		log.Fatalf("Error creating test accounts; %v\n", err)
+	// Create test accounts for tommy, lee and bob
+	users := []User{tommy, lee, bob}
+	for _, user := range users {
+		resp, err := createAccount(testServer.URL, user)
+		if err != nil {
+			log.Fatalf("Error creating test accounts; %v\n", err)
+		}
+		resp.Body.Close()
 	}
-	resp.Body.Close()
-
-	resp, err = createAccount(testServer.URL, lee)
-	if err != nil {
-		log.Fatalf("Error creating test accounts; %v\n", err)
-	}
-	resp.Body.Close()
 
 	// Run tests
 	code := m.Run()

@@ -3,15 +3,17 @@ package tests
 import (
 	"crypto/ecdsa"
 	"crypto/sha256"
-	"os"
+	"fmt"
+	"path/filepath"
 	"testing"
 
 	"github.com/caleb-mwasikira/tap_gopay_backend/encrypt"
 )
 
-// Reads private key from file.
-func getPrivateKey(path string) (*ecdsa.PrivateKey, error) {
-	return encrypt.LoadPrivateKeyFromFile(path)
+// Reads user's private key from file.
+func getPrivateKey(email string) (*ecdsa.PrivateKey, error) {
+	fpath := filepath.Join("keys", fmt.Sprintf("%v.key", email))
+	return encrypt.LoadPrivateKeyFromFile(fpath)
 }
 
 func generatePrivateKey(path string, password string) (*ecdsa.PrivateKey, error) {
@@ -20,12 +22,7 @@ func generatePrivateKey(path string, password string) (*ecdsa.PrivateKey, error)
 		return nil, err
 	}
 
-	data, err := encrypt.PemEncodePrivateKey(privKey)
-	if err != nil {
-		return nil, err
-	}
-
-	err = os.WriteFile(path, data, 0700)
+	err = encrypt.SavePrivateKeyToFile(privKey, path, true)
 	return privKey, err
 }
 

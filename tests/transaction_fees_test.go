@@ -3,6 +3,7 @@ package tests
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,6 +12,21 @@ import (
 	"github.com/caleb-mwasikira/tap_gopay_backend/database"
 	"github.com/caleb-mwasikira/tap_gopay_backend/handlers"
 )
+
+func getTransactionFee(serverUrl string, amount float64) (float64, error) {
+	resp, err := http.Get(serverUrl + fmt.Sprintf("/transaction-fees?amount=%.2f", amount))
+	if err != nil {
+		return 0, err
+	}
+
+	var transactionFee database.TransactionFee
+	err = json.NewDecoder(resp.Body).Decode(&transactionFee)
+	if err != nil {
+		return 0, err
+	}
+
+	return transactionFee.Fee, nil
+}
 
 func TestCreateTransactionFees(t *testing.T) {
 	testServer := httptest.NewServer(r)

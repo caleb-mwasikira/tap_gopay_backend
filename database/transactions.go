@@ -1,6 +1,7 @@
 package database
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -11,18 +12,19 @@ const (
 	TRANSACTION_ID_LEN int = 12
 )
 
-type Account struct {
-	Username string `json:"username"`
-	Address  string `json:"wallet_address"`
-	Phone    string `json:"phone_no"`
+type WalletOwner struct {
+	Username      string `json:"username"`
+	PhoneNo       string `json:"phone_no"`
+	WalletAddress string `json:"wallet_address"`
 }
 
 type Transaction struct {
-	TransactionCode string  `json:"transaction_code"`
-	Sender          Account `json:"sender"`
-	Receiver        Account `json:"receiver"`
-	Amount          float64 `json:"amount"`
-	Fee             float64 `json:"fee"`
+	TransactionCode string      `json:"transaction_code"`
+	Sender          WalletOwner `json:"sender"`
+	Receiver        WalletOwner `json:"receiver"`
+	Amount          float64     `json:"amount"`
+	Fee             float64     `json:"fee"`
+	Status          string      `json:"status"`
 
 	// Time when transaction was initiated by client - signed by client
 	Timestamp   string `json:"timestamp"`
@@ -31,6 +33,12 @@ type Transaction struct {
 
 	// Time when record was saved to database
 	CreatedAt string `json:"created_at"`
+}
+
+func (t Transaction) Hash() []byte {
+	data := fmt.Sprintf("%s|%s|%.2f|%.2f|%s", t.Sender.WalletAddress, t.Receiver.WalletAddress, t.Amount, t.Fee, t.Timestamp)
+	h := sha256.Sum256([]byte(data))
+	return h[:]
 }
 
 func generateRandomChar() string {
@@ -123,8 +131,8 @@ func CreateTransaction(
 
 func GetTransaction(transactionCode string) (*Transaction, error) {
 	var t Transaction
-	var sender Account
-	var receiver Account
+	var sender WalletOwner
+	var receiver WalletOwner
 
 	query := `
 		SELECT
@@ -137,6 +145,7 @@ func GetTransaction(transactionCode string) (*Transaction, error) {
 			receivers_wallet_address,
 			amount,
 			fee,
+			status,
 			timestamp,
 			signature,
 			public_key_hash,
@@ -148,13 +157,14 @@ func GetTransaction(transactionCode string) (*Transaction, error) {
 	err := row.Scan(
 		&t.TransactionCode,
 		&sender.Username,
-		&sender.Phone,
-		&sender.Address,
+		&sender.PhoneNo,
+		&sender.WalletAddress,
 		&receiver.Username,
-		&receiver.Phone,
-		&receiver.Address,
+		&receiver.PhoneNo,
+		&receiver.WalletAddress,
 		&t.Amount,
 		&t.Fee,
+		&t.Status,
 		&t.Timestamp,
 		&t.Signature,
 		&t.PublicKeyId,
@@ -202,11 +212,11 @@ func GetRecentTransactions(sendersAddress string) ([]*Transaction, error) {
 		err := rows.Scan(
 			&t.TransactionCode,
 			&t.Sender.Username,
-			&t.Sender.Phone,
-			&t.Sender.Address,
+			&t.Sender.PhoneNo,
+			&t.Sender.WalletAddress,
 			&t.Receiver.Username,
-			&t.Receiver.Phone,
-			&t.Receiver.Address,
+			&t.Receiver.PhoneNo,
+			&t.Receiver.WalletAddress,
 			&t.Amount,
 			&t.Fee,
 			&t.Timestamp,

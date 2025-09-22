@@ -14,7 +14,6 @@ import (
 
 	"github.com/caleb-mwasikira/tap_gopay_backend/api"
 	"github.com/caleb-mwasikira/tap_gopay_backend/database"
-	"github.com/caleb-mwasikira/tap_gopay_backend/encrypt"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -25,10 +24,11 @@ type TransactionRequest struct {
 	Fee       float64 `json:"fee" validate:"min=0"`
 	Timestamp string  `json:"timestamp"` // Time when transaction was initiated by the client
 
+	Signature string `json:"signature" validate:"signature"` // Base64 encoded signature
+
 	// Base64 encoded hash of public key
 	// that should be used to verify signature
 	PublicKeyHash string `json:"public_key_hash" validate:"public_key_hash"`
-	Signature     string `json:"signature" validate:"signature"` // Base64 encoded signature
 }
 
 func (req TransactionRequest) Hash() []byte {
@@ -37,30 +37,16 @@ func (req TransactionRequest) Hash() []byte {
 	return h[:]
 }
 
-func getWalletOwnedBy(phone string) (*database.Wallet, error) {
-	wallets, err := database.GetAllWalletsOwnedBy(
-		phone,
-		func(wallet *database.Wallet) bool {
-			return wallet.IsActive
-		},
-	)
+func verifySignature(
+	b64EncodedSignature string,
+	data []byte,
+	email string,
+	b64EncodedPubKeyHash string,
+) error {
+	// Fetch user's public key that was used to sign data
+	pubKey, err := database.GetPublicKey(email, b64EncodedPubKeyHash)
 	if err != nil {
-		return nil, fmt.Errorf("error fetching wallets owned by phone number; %v", err)
-	}
-
-	if len(wallets) == 0 {
-		return nil, fmt.Errorf("no wallets found owned by phone number")
-	}
-
-	// TODO: Return wallet that hasn't exceeded its spending limits
-
-	return wallets[0], nil
-}
-
-func verifySignature(pubKeyBytes []byte, data []byte, b64EncodedSignature string) error {
-	pubKey, err := encrypt.LoadPublicKeyFromBytes(pubKeyBytes)
-	if err != nil {
-		return fmt.Errorf("error loading public key; %v", err)
+		return err
 	}
 
 	signature, err := base64.StdEncoding.DecodeString(b64EncodedSignature)
@@ -75,7 +61,7 @@ func verifySignature(pubKeyBytes []byte, data []byte, b64EncodedSignature string
 	return nil
 }
 
-func TransferFunds(w http.ResponseWriter, r *http.Request) {
+func SendMoney(w http.ResponseWriter, r *http.Request) {
 	user, ok := getAuthUser(r)
 	if !ok {
 		api.Unauthorized(w, "Access to this route requires user login")
@@ -94,36 +80,34 @@ func TransferFunds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get user's public key used to sign the transaction
-	pubKeyBytes, err := database.GetPublicKey(user.Email, req.PublicKeyHash)
-	if err != nil {
-		api.Errorf(w, "Error sending funds. Public key not found", err)
-		return
-	}
-
-	data := req.Hash()
-	err = verifySignature(pubKeyBytes, data, req.Signature)
-	if err != nil {
-		api.Errorf(w, "Error sending funds. Signature verification failed", err)
-		return
-	}
-
 	if isValidPhoneNumber(req.Sender) {
-		wallet, err := getWalletOwnedBy(req.Sender)
-		if err != nil {
+		wallets, err := database.GetWalletsOwnedByPhoneNo(
+			req.Sender,
+			func(w *database.Wallet) bool {
+				return w.IsActive
+			},
+		)
+		if err != nil || len(wallets) == 0 {
+			err = fmt.Errorf("error fetching wallets owned by '%v'; %v", req.Sender, err)
 			api.Errorf(w, "Sender has no active wallet accounts", err)
 			return
 		}
-		req.Sender = wallet.Address
+		req.Sender = wallets[0].WalletAddress
 	}
 
 	if isValidPhoneNumber(req.Receiver) {
-		wallet, err := getWalletOwnedBy(req.Receiver)
-		if err != nil {
+		wallets, err := database.GetWalletsOwnedByPhoneNo(
+			req.Receiver,
+			func(w *database.Wallet) bool {
+				return w.IsActive
+			},
+		)
+		if err != nil || len(wallets) == 0 {
+			err = fmt.Errorf("error fetching wallets owned by '%v'; %v", req.Receiver, err)
 			api.Errorf(w, "Receiver has no active wallet accounts", err)
 			return
 		}
-		req.Receiver = wallet.Address
+		req.Receiver = wallets[0].WalletAddress
 	}
 
 	if req.Sender == req.Receiver {
@@ -170,7 +154,15 @@ func TransferFunds(w http.ResponseWriter, r *http.Request) {
 
 	go notifyInterestedParties(*transaction)
 
-	api.OK2(w, transaction)
+	switch transaction.Status {
+	case "confirmed":
+		api.OK2(w, transaction)
+	case "pending":
+		api.Accepted(w, transaction)
+	default:
+		// rejected
+		api.Errorf(w, "Transaction rejected", nil)
+	}
 }
 
 // A user can request funds from another user
@@ -193,15 +185,8 @@ func RequestFunds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get user's public key used to sign the transaction
-	pubKeyBytes, err := database.GetPublicKey(user.Email, req.PublicKeyHash)
-	if err != nil {
-		api.Errorf(w, "Error sending funds. Public key not found", err)
-		return
-	}
-
 	data := req.Hash()
-	err = verifySignature(pubKeyBytes, data, req.Signature)
+	err = verifySignature(req.Signature, data, user.Email, req.PublicKeyHash)
 	if err != nil {
 		api.Errorf(w, "Error requesting funds. Signature verification failed", nil)
 		return
@@ -242,7 +227,7 @@ func GetTransaction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get involved parties
-	involvedParties, err := database.GetWalletOwners(t.Sender.Address, t.Receiver.Address)
+	involvedParties, err := database.GetWalletOwners(t.Sender.WalletAddress, t.Receiver.WalletAddress)
 	if err != nil {
 		api.Errorf(w, "Error fetching involved parties in transaction", err)
 		return
@@ -285,4 +270,72 @@ func GetRecentTransactions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	api.OK2(w, transactions)
+}
+
+type SignTransactionRequest struct {
+	Signature string `json:"signature" validate:"signature"` // Base64 encoded signature
+
+	// Base64 encoded hash of public key
+	// that should be used to verify signature
+	PublicKeyHash string `json:"public_key_hash" validate:"public_key_hash"`
+}
+
+func SignTransaction(w http.ResponseWriter, r *http.Request) {
+	user, ok := getAuthUser(r)
+	if !ok {
+		api.Unauthorized(w, "Access to this route requires user login")
+		return
+	}
+
+	transactionCode := chi.URLParam(r, "transaction_code")
+
+	var req SignTransactionRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		api.BadRequest(w, "Error parsing request body", err)
+		return
+	}
+
+	if err = validateStruct(req); err != nil {
+		api.BadRequest(w, err.Error(), nil)
+		return
+	}
+
+	t, err := database.GetTransaction(transactionCode)
+	if err != nil {
+		message := fmt.Sprintf("Error fetching transaction '%v'", transactionCode)
+		api.Errorf(w, message, nil)
+		return
+	}
+
+	err = verifySignature(
+		req.Signature,
+		t.Hash(),
+		user.Email,
+		req.PublicKeyHash,
+	)
+	if err != nil {
+		api.Errorf(w, "Error verifying signature", err)
+		return
+	}
+
+	err = database.AddSignature(
+		user.Id,
+		transactionCode,
+		req.Signature,
+		req.PublicKeyHash,
+	)
+	if err != nil {
+		message := fmt.Sprintf("Error signing transaction '%v'", transactionCode)
+		api.Errorf(w, message, err)
+		return
+	}
+
+	transaction, err := database.GetTransaction(transactionCode)
+	if err != nil {
+		api.Errorf(w, "Error fetching signed transaction", err)
+		return
+	}
+
+	api.OK2(w, transaction)
 }

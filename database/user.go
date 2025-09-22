@@ -1,6 +1,8 @@
 package database
 
 import (
+	"strings"
+
 	"github.com/nyaruka/phonenumbers"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -10,7 +12,7 @@ type User struct {
 	Username      string `json:"username"`
 	Email         string `json:"email"`
 	Password      string `json:"password"`
-	Phone         string `json:"phone_no"`
+	PhoneNo       string `json:"phone_no"`
 	EmailVerified bool   `json:"email_verified"`
 	Role          string `json:"role"`
 }
@@ -81,13 +83,14 @@ func GetUser(email string) (*User, error) {
 	`
 	row := db.QueryRow(query, email)
 
-	user := User{}
+	var user User
+
 	err := row.Scan(
 		&user.Id,
 		&user.Username,
 		&user.Email,
 		&user.Password,
-		&user.Phone,
+		&user.PhoneNo,
 		&user.Role,
 	)
 	if err != nil {
@@ -115,4 +118,46 @@ func ChangePassword(email, password string) error {
 	query := "UPDATE users SET password= ? WHERE email= ?"
 	_, err = db.Exec(query, hashedPassword, email)
 	return err
+}
+
+func isEmpty(value string) bool {
+	return strings.TrimSpace(value) == ""
+}
+
+func GetUserByEmailOrPhoneNo(email, phoneNo string) (*User, error) {
+	emptyPhoneNo := strings.TrimSpace(phoneNo) == ""
+
+	if !emptyPhoneNo {
+		// Format phone number
+		num, err := phonenumbers.Parse(phoneNo, "KE")
+		if err != nil {
+			return nil, err
+		}
+		phoneNo = phonenumbers.Format(num, phonenumbers.INTERNATIONAL)
+	}
+
+	query := `
+		SELECT
+			id,
+			username,
+			email,
+			password,
+			phone_no,
+			role
+		FROM users WHERE email = ? OR phone_no= ?
+		LIMIT 1
+	`
+	row := db.QueryRow(query, email, phoneNo)
+
+	var user User
+
+	err := row.Scan(
+		&user.Id,
+		&user.Username,
+		&user.Email,
+		&user.Password,
+		&user.PhoneNo,
+		&user.Role,
+	)
+	return &user, err
 }

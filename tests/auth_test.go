@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/brianvoe/gofakeit"
@@ -18,15 +20,9 @@ import (
 )
 
 var (
-	phoneNumbers = []string{
-		"+254 130761229", "+254 120760991",
-		"+254 736414224", "+254 120754951",
-		"+254 737635477", "+254 113216258",
-		"+254 729982335", "+254 130132427",
-		"+254 745985969", "+254 709367512",
-	}
 	tommy = NewUser("tommy", "iamtommy@gmail.com", "tommyhasagun")
 	lee   = NewUser("leejohnson", "leejohnson@gmail.com", "johnsonsandjohnsons")
+	bob   = NewUser("bobthebuilder", "canwefixit@gmail.com", "yeswecan")
 
 	cookiesCache = map[string][]*http.Cookie{}
 )
@@ -35,7 +31,19 @@ type User struct {
 	Username string
 	Email    string
 	Password string
-	Phone    string
+	PhoneNo  string
+}
+
+func randomPhoneNo() string {
+	str := strings.Builder{}
+	str.WriteString("07") // Kenyan phone number
+
+	const phoneNoLength int = 8
+	for range phoneNoLength {
+		num := rand.IntN(10)
+		str.WriteString(fmt.Sprintf("%d", num))
+	}
+	return str.String()
 }
 
 func NewRandomUser() User {
@@ -43,7 +51,7 @@ func NewRandomUser() User {
 		Username: gofakeit.Username(),
 		Email:    gofakeit.Email(),
 		Password: "2856",
-		Phone:    *randomChoice(phoneNumbers),
+		PhoneNo:  randomPhoneNo(),
 	}
 }
 
@@ -52,7 +60,7 @@ func NewUser(username, email, password string) User {
 		Username: username,
 		Email:    email,
 		Password: password,
-		Phone:    *randomChoice(phoneNumbers),
+		PhoneNo:  randomPhoneNo(),
 	}
 }
 
@@ -74,7 +82,7 @@ func createAccount(serverUrl string, user User) (*http.Response, error) {
 		Username:  user.Username,
 		Email:     user.Email,
 		Password:  user.Password,
-		Phone:     user.Phone,
+		PhoneNo:   user.PhoneNo,
 		PublicKey: base64.StdEncoding.EncodeToString(pubKeyBytes),
 	}
 	body, err := json.Marshal(&req)
@@ -95,17 +103,15 @@ func TestRegister(t *testing.T) {
 	testServer := httptest.NewServer(r)
 	defer testServer.Close()
 
-	users := []User{tommy, lee}
+	user := NewRandomUser()
 
-	for _, user := range users {
-		resp, err := createAccount(testServer.URL, user)
-		if err != nil {
-			t.Fatalf("Error making request; %v\n", err)
-		}
-		expectStatus(t, resp, http.StatusOK)
-		resp.Body.Close()
+	resp, err := createAccount(testServer.URL, user)
+	if err != nil {
+		t.Fatalf("Error making request; %v\n", err)
 	}
+	defer resp.Body.Close()
 
+	expectStatus(t, resp, http.StatusOK)
 }
 
 func TestLogin(t *testing.T) {
@@ -125,8 +131,7 @@ func TestLogin(t *testing.T) {
 	password := tommy.Password
 
 	// Fetch or generate user's private and public keys
-	path := filepath.Join("keys", fmt.Sprintf("%v.key", email))
-	privKey, err := getPrivateKey(path)
+	privKey, err := getPrivateKey(email)
 	if err != nil {
 		t.Fatalf("Error fetching user's private key; %v\n", err)
 	}
@@ -209,8 +214,7 @@ func requireLogin(user User, serverUrl string) string {
 	}
 
 	// Fetch or generate user's private and public keys
-	path := filepath.Join("keys", fmt.Sprintf("%v.key", user.Email))
-	privKey, err := getPrivateKey(path)
+	privKey, err := getPrivateKey(user.Email)
 	if err != nil {
 		log.Fatalf("Error fetching user's private key; %v\n", err)
 	}
