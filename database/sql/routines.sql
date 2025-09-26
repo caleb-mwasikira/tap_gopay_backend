@@ -46,18 +46,14 @@ BEGIN
   LIMIT 1;
 END;
 
-
-CREATE DEFINER=`root`@`localhost` PROCEDURE `getWalletBalance`(
-  IN `p_wallet_address` VARCHAR(255),
-  OUT `p_wallet_balance` DECIMAL(10,2)
-)
+CREATE DEFINER=`root`@`localhost` PROCEDURE `getWalletBalance`(IN `p_wallet_address` VARCHAR(255), OUT `p_wallet_balance` DECIMAL(10,2))
 BEGIN
   DECLARE var_initial_deposit DECIMAL(10,2) DEFAULT 0;
   DECLARE var_total_sent DECIMAL(10,2);
   DECLARE var_total_received DECIMAL(10,2);
 
   -- Check if wallet exists
-  CALL walletExists(p_wallet_address, @wallet_exists);
+  CALL walletExists(p_wallet_address, @wallet_exists, @wallet_active);
 
   IF NOT @wallet_exists THEN
     SIGNAL SQLSTATE "45000"
@@ -91,50 +87,38 @@ END;
 
 CREATE DEFINER=`root`@`localhost` PROCEDURE `walletExists`(
   IN `p_wallet_address` VARCHAR(255),
-  OUT `p_wallet_exists` BOOLEAN
+  OUT `p_wallet_exists` BOOLEAN,
+  OUT `p_wallet_active` BOOLEAN
 )
 BEGIN
-	DECLARE wallet_exists TINYINT DEFAULT 0;
+    DECLARE wallet_exists TINYINT DEFAULT 0;
+    DECLARE wallet_active TINYINT DEFAULT 0;
 
-    -- Check wallets
-    SELECT EXISTS(
-        SELECT 1 FROM wallets
+    -- First check if wallet exists in wallets
+    SELECT COUNT(*) > 0 INTO wallet_exists
+    FROM wallets
+    WHERE wallet_address = p_wallet_address;
+
+    -- If exists, check if it’s active
+    IF wallet_exists = 1 THEN
+        SELECT is_active INTO wallet_active
+        FROM wallets
         WHERE wallet_address = p_wallet_address
-    ) INTO wallet_exists;
+        LIMIT 1;
+    ELSE
+        -- Otherwise check cash_pools
+        SELECT COUNT(*) > 0 INTO wallet_exists
+        FROM cash_pools
+        WHERE wallet_address = p_wallet_address;
 
-    -- Check cash pools if still 0
-    IF wallet_exists = 0 THEN
-        SELECT EXISTS(
-            SELECT 1 FROM cash_pools
+        IF wallet_exists = 1 THEN
+            SELECT expires_at > NOW() INTO wallet_active
+            FROM cash_pools
             WHERE wallet_address = p_wallet_address
-        ) INTO wallet_exists;
+            LIMIT 1;
+        END IF;
     END IF;
 
-	SET p_wallet_exists = wallet_exists;
-END;
-
-CREATE DEFINER=`root`@`localhost` PROCEDURE `isActiveWallet`(
-  IN `p_wallet_address` VARCHAR(255),
-  OUT `p_wallet_exists_and_is_active` BOOLEAN
-)
-BEGIN
-  DECLARE wallet_exists TINYINT DEFAULT 0;
-
-  -- Check wallets
-  SELECT EXISTS(
-      SELECT 1 FROM wallets
-      WHERE wallet_address = p_wallet_address
-      AND is_active = TRUE
-  ) INTO wallet_exists;
-
-  -- Check cash pools if still 0
-  IF wallet_exists = 0 THEN
-      SELECT EXISTS(
-          SELECT 1 FROM cash_pools
-          WHERE wallet_address = p_wallet_address
-          AND expires_at > NOW()
-      ) INTO wallet_exists;
-  END IF;
-
-	SET p_wallet_exists_and_is_active = wallet_exists;
+    SET p_wallet_exists = wallet_exists;
+    SET p_wallet_active = wallet_active;
 END;

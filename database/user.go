@@ -125,9 +125,7 @@ func isEmpty(value string) bool {
 }
 
 func GetUserByEmailOrPhoneNo(email, phoneNo string) (*User, error) {
-	emptyPhoneNo := strings.TrimSpace(phoneNo) == ""
-
-	if !emptyPhoneNo {
+	if !isEmpty(phoneNo) {
 		// Format phone number
 		num, err := phonenumbers.Parse(phoneNo, "KE")
 		if err != nil {

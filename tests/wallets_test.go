@@ -49,10 +49,10 @@ func createWallet(user User) (*database.Wallet, error) {
 	return &wallet, err
 }
 
-func freezeWallet(serverUrl string, user User, walletAddress string) error {
+func freezeWallet(user User, walletAddress string) error {
 	requireLogin(user)
 
-	url := serverUrl + fmt.Sprintf("/wallets/%v/freeze", walletAddress)
+	url := testServer.URL + fmt.Sprintf("/wallets/%v/freeze", walletAddress)
 	resp, err := http.Post(url, jsonContentType, nil)
 	if err != nil {
 		return err
@@ -62,35 +62,18 @@ func freezeWallet(serverUrl string, user User, walletAddress string) error {
 	return nil
 }
 
-func TestCreateWallet(t *testing.T) {
-	users := []User{tommy, lee}
+func getWallet(user User, walletAddress string) (*database.Wallet, error) {
+	requireLogin(user)
 
-	for _, user := range users {
-		_, err := createWallet(user)
-		if err != nil {
-			t.Fatalf("Error creating wallet; %v\n", err)
-		}
-	}
-}
-
-func TestGetAllWallets(t *testing.T) {
-	requireLogin(tommy)
-
-	url := testServer.URL + "/wallets"
-	resp, err := http.Get(url)
+	resp, err := http.Get(testServer.URL + "/wallets/" + walletAddress)
 	if err != nil {
-		t.Fatalf("Error making request; %v\n", err)
+		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body :=
-		expectStatus(t, resp, http.StatusOK)
-
-	var results []*database.Wallet
-	err = json.Unmarshal(body, &results)
-	if err != nil {
-		t.Fatalf("Expected an []Wallet in response body but got garbage data")
-	}
+	var wallet database.Wallet
+	err = json.NewDecoder(resp.Body).Decode(&wallet)
+	return &wallet, err
 }
 
 // Selects random items from list of items.
@@ -140,6 +123,37 @@ func getAllWallets(
 	}
 
 	return filtered, err
+}
+
+func TestCreateWallet(t *testing.T) {
+	users := []User{tommy, lee}
+
+	for _, user := range users {
+		_, err := createWallet(user)
+		if err != nil {
+			t.Fatalf("Error creating wallet; %v\n", err)
+		}
+	}
+}
+
+func TestGetAllWallets(t *testing.T) {
+	requireLogin(tommy)
+
+	url := testServer.URL + "/wallets"
+	resp, err := http.Get(url)
+	if err != nil {
+		t.Fatalf("Error making request; %v\n", err)
+	}
+	defer resp.Body.Close()
+
+	body :=
+		expectStatus(t, resp, http.StatusOK)
+
+	var results []*database.Wallet
+	err = json.Unmarshal(body, &results)
+	if err != nil {
+		t.Fatalf("Expected an []Wallet in response body but got garbage data")
+	}
 }
 
 func TestGetWallet(t *testing.T) {
@@ -196,7 +210,7 @@ func TestFreezeWallet(t *testing.T) {
 	}
 
 	// Freeze tommys wallet
-	err = freezeWallet(testServer.URL, tommy, tommysWallet.WalletAddress)
+	err = freezeWallet(tommy, tommysWallet.WalletAddress)
 	if err != nil {
 		t.Fatalf("Error freezing user's wallet; %v\n", err)
 	}
@@ -241,7 +255,7 @@ func TestActivateWallet(t *testing.T) {
 	}
 
 	// Freeze tommy's wallet
-	err = freezeWallet(testServer.URL, tommy, tommysWallet.WalletAddress)
+	err = freezeWallet(tommy, tommysWallet.WalletAddress)
 	if err != nil {
 		t.Fatalf("Error freezing user's wallet; %v", err)
 	}

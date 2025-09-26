@@ -95,11 +95,26 @@ func randomString(length uint) string {
 
 func TestMain(m *testing.M) {
 	// Setup code here (runs once before tests)
+	err := os.RemoveAll("keys")
+	if err != nil {
+		log.Fatalf("Error deleting keys directory; %v\n", err)
+	}
+
+	err = os.Mkdir("keys", 0700)
+	if err != nil {
+		log.Fatalf("Error creating keys directory; %v\n", err)
+	}
+
 	tablesToSkip := []string{"transaction_fees"}
 
-	err := database.TruncateTables(tablesToSkip)
+	err = database.TruncateTables(tablesToSkip)
 	if err != nil {
 		log.Fatalf("Error truncating database tables; %v\n", err)
+	}
+
+	err = database.CreateSystemUser()
+	if err != nil {
+		log.Fatalf("Error creating system user; %v\n", err)
 	}
 
 	testServer = httptest.NewServer(r)

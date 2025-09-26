@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
+	"time"
 
 	"github.com/caleb-mwasikira/tap_gopay_backend/api"
 	"github.com/caleb-mwasikira/tap_gopay_backend/database"
@@ -68,4 +70,30 @@ func GetCashPool(w http.ResponseWriter, r *http.Request) {
 	}
 
 	api.OK2(w, cashPool)
+}
+
+func RefundExpiredCashPools() {
+	for {
+		// TODO: Set longer time delay in production eg. 15 * time.Minute
+		<-time.After(5 * time.Second)
+
+		expiredCashPools, err := database.GetExpiredCashPools()
+		if err != nil {
+			log.Printf("Error fetching expired cash pools; %v\n", err)
+			continue
+		}
+
+		if len(expiredCashPools) == 0 {
+			continue
+		}
+
+		for _, cashPool := range expiredCashPools {
+			go func(pool string) {
+				err := database.RefundExpiredCashPool(pool)
+				if err != nil {
+					log.Printf("Error refunding cash pool; %v\n", err)
+				}
+			}(cashPool)
+		}
+	}
 }

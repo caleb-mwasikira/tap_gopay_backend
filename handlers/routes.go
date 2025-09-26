@@ -32,7 +32,10 @@ func GetRoutes() *chi.Mux {
 		r.Group(func(r chi.Router) {
 			r.Use(RequireAuthMiddleware)
 
+			r.Get("/verify-login", VerifyLogin)
 			r.HandleFunc("/subscribe-notifications", SubscribeNotifications)
+
+			// Wallets
 			r.Post("/new-wallet", CreateWallet)
 			r.Get("/wallets", GetAllWallets)
 			r.Get("/wallets/{wallet_address}", GetWallet)
@@ -42,14 +45,19 @@ func GetRoutes() *chi.Mux {
 			r.Post("/wallets/{wallet_address}/limit", SetOrUpdateLimit)
 			r.Post("/wallets/{wallet_address}/add-owner", AddWalletOwner)
 			r.Post("/wallets/{wallet_address}/remove-owner", RemoveWalletOwner)
+
+			// Transactions
 			r.Post("/send-money", SendMoney)
 			r.Post("/request-funds", RequestFunds)
 			r.Get("/recent-transactions/{wallet_address}", GetRecentTransactions)
 			r.Get("/transactions/{transaction_code}", GetTransaction)
 			r.Post("/transactions/{transaction_code}/sign-transaction", SignTransaction)
-			r.Get("/verify-login", VerifyLogin)
+
+			// Cash Pools
 			r.Post("/new-cash-pool", CreateCashPool)
 			r.Get("/cash-pools/{wallet_address}", GetCashPool)
+
+			go RefundExpiredCashPools()
 		})
 	})
 	return r

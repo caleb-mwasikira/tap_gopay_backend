@@ -13,6 +13,7 @@ const (
 )
 
 type WalletOwner struct {
+	UserId        int    `json:"-"`
 	Username      string `json:"username"`
 	Email         string `json:"email"`
 	PhoneNo       string `json:"phone_no"`
@@ -71,8 +72,9 @@ func CreateTransaction(
 	userId int,
 	sender, receiver string,
 	amount, fee float64,
-	timestamp, signature string,
-	publicKeyHash string,
+	timestamp string,
+	b64EncodedSignature string,
+	b64EncodedPublicKeyHash string,
 ) (*Transaction, error) {
 	// if !ownsWallet(userId, sender) {
 	// 	return nil, ErrNoOwnership
@@ -94,7 +96,7 @@ func CreateTransaction(
 		fee,
 		timestamp
 	) VALUES(?, ?, ?, ?, ?, ?)`
-	_, err = tx.Exec(
+	result, err := tx.Exec(
 		query,
 		transactionCode,
 		sender,
@@ -104,23 +106,110 @@ func CreateTransaction(
 		timestamp,
 	)
 	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	transactionId, err := result.LastInsertId()
+	if err != nil {
+		tx.Rollback()
 		return nil, err
 	}
 
 	// Add signature into signatures table
 	query = `
 	INSERT INTO signatures(
+		transaction_id,
 		transaction_code,
 		user_id,
 		signature,
 		public_key_hash
-	) VALUES(?, ?, ?, ?)`
+	) VALUES(?, ?, ?, ?, ?)`
 	_, err = tx.Exec(
 		query,
+		transactionId,
 		transactionCode,
 		userId,
+		b64EncodedSignature,
+		b64EncodedPublicKeyHash,
+	)
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	return GetTransaction(transactionCode)
+}
+
+func CreateRefundTransaction(
+	userId int,
+	refundTransactionCode string,
+	sender, receiver string,
+	amount, fee float64,
+	timestamp string,
+	b64EncodedSignature string,
+	b64EncodedPublicKeyHash string,
+) (*Transaction, error) {
+	transactionCode := "REF-" + generateTransactionCode()
+
+	tx, err := db.Begin()
+	if err != nil {
+		return nil, err
+	}
+
+	query := `
+	INSERT IGNORE INTO transactions(
+		refund_transaction_code,
+		transaction_code,
+		sender,
+		receiver,
+		amount,
+		fee,
+		timestamp,
+		transaction_type
+	) VALUES(?, ?, ?, ?, ?, ?, ?, ?)`
+	result, err := tx.Exec(
+		query,
+		refundTransactionCode,
+		transactionCode,
+		sender,
+		receiver,
+		amount,
+		fee,
+		timestamp,
+		"refund",
+	)
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	transactionId, err := result.LastInsertId()
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	// Add signature into signatures table
+	query = `
+	INSERT IGNORE INTO signatures(
+		transaction_id,
+		transaction_code,
+		user_id,
 		signature,
-		publicKeyHash,
+		public_key_hash
+	) VALUES(?, ?, ?, ?, ?)`
+	_, err = tx.Exec(
+		query,
+		transactionId,
+		transactionCode,
+		userId,
+		b64EncodedSignature,
+		b64EncodedPublicKeyHash,
 	)
 	if err != nil {
 		tx.Rollback()
@@ -256,8 +345,9 @@ type RequestFundsResult struct {
 func CreateRequestFunds(
 	sender, receiver string,
 	amount float64,
-	timestamp, signature string,
-	publicKeyHash string,
+	timestamp string,
+	b64EncodedSignature string,
+	b64EncodedPublicKeyHash string,
 ) (*RequestFundsResult, error) {
 	transactionCode := "RX-" + generateTransactionCode()
 
@@ -267,8 +357,8 @@ func CreateRequestFunds(
 		Receiver:        receiver,
 		Amount:          amount,
 		Timestamp:       timestamp,
-		Signature:       signature,
-		PublicKeyId:     publicKeyHash,
+		Signature:       b64EncodedSignature,
+		PublicKeyId:     b64EncodedPublicKeyHash,
 	}
 
 	query := `

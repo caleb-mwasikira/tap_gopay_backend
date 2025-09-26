@@ -39,8 +39,7 @@ func init() {
 	var err error
 	db, err = openDbConn(config)
 	if err != nil {
-		log.Printf("Error opening database connection; %v\n", err)
-		os.Exit(1)
+		log.Fatalf("Error opening database connection; %v\n", err)
 	}
 
 	// During first launch, our database is not going to have any tables
@@ -138,7 +137,7 @@ func MigrateDatabase(rootUser, rootPassword string) error {
 			return fmt.Errorf("error reading sql file; %v", err)
 		}
 
-		log.Printf("Executing file '%v'\n", filename)
+		log.Printf("\t Running '%v'\n", filename)
 
 		query := string(data)
 		_, err = dbConn.Exec(query)
@@ -182,11 +181,11 @@ func TruncateTables(tablesToSkip []string) error {
 		}
 
 		query := fmt.Sprintf("TRUNCATE TABLE `%s`", table)
+		log.Println(query)
 
-		if _, err := db.Exec(query); err != nil {
+		_, err := db.Exec(query)
+		if err != nil {
 			log.Printf("Error truncating table %s: %v", table, err)
-		} else {
-			log.Printf("Truncated table %s", table)
 		}
 	}
 	return nil

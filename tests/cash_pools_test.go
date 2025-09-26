@@ -14,16 +14,15 @@ import (
 )
 
 func createCashPool(
-	serverUrl string,
 	creator User,
 	receiver *database.Wallet,
+	targetAmount float64,
+	expiresAt time.Time,
 ) (*database.CashPool, error) {
-	expiresAt := time.Now().Add(5 * time.Minute)
-
 	req := handlers.CashPoolRequest{
 		Name:         "Fundraising",
 		Description:  "Raising money for school fees",
-		TargetAmount: 150,
+		TargetAmount: targetAmount,
 		Receiver:     receiver.WalletAddress,
 		ExpiresAt:    expiresAt.Format(time.RFC3339),
 	}
@@ -35,7 +34,7 @@ func createCashPool(
 	requireLogin(creator)
 
 	resp, err := http.Post(
-		serverUrl+"/new-cash-pool",
+		testServer.URL+"/new-cash-pool",
 		jsonContentType,
 		bytes.NewBuffer(body),
 	)
@@ -51,37 +50,76 @@ func createCashPool(
 	return &cashPool, err
 }
 
-func fundCashPool(cashPool *database.CashPool) (float64, error) {
-	var collectedAmount float64 = 0
-	targetAmount := cashPool.TargetAmount
-	users := []User{tommy, lee}
+func getCashPool(walletAddress string) (*database.CashPool, error) {
+	resp, err := http.Get(testServer.URL + "/cash-pools/" + walletAddress)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
 
-	for collectedAmount < targetAmount {
+	var cashPool database.CashPool
+
+	err = json.NewDecoder(resp.Body).Decode(&cashPool)
+	return &cashPool, err
+}
+
+type cashPoolDeposit struct {
+	user          User
+	walletAddress string
+	original      float64
+	amountSent    float64
+}
+
+// Deposits funds into a cash pool.
+// Returns total amount deposited, all wallet addresses and the
+// amounts they sent and an error if any exists
+func fundCashPool(cashPool *database.CashPool, targetAmount float64) (float64, []cashPoolDeposit, error) {
+	var depositedAmount float64 = 0
+	users := []User{tommy, lee}
+	deposits := []cashPoolDeposit{}
+	numTries := 0
+
+	for depositedAmount < targetAmount {
+		if numTries >= 3 {
+			break
+		}
+
 		amount := utils.RoundFloat(targetAmount*rand.Float64(), 2)
 
 		user := randomChoice(users)
 
-		usersWallet, err := createWallet(*user)
+		wallet, err := createWallet(*user)
 		if err != nil {
-			return 0.0, err
+			return 0.0, nil, err
 		}
 
 		resp, err := sendMoney(
-			usersWallet.WalletAddress,
+			wallet.WalletAddress,
 			cashPool.WalletAddress,
 			*user,
 			amount,
 		)
 		if err != nil {
-			return 0.0, err
+			return 0.0, nil, err
 		}
 		resp.Body.Close()
 
 		if resp.StatusCode == http.StatusOK {
-			collectedAmount += amount
+			depositedAmount += amount
+			deposits = append(deposits, cashPoolDeposit{
+				user:          *user,
+				walletAddress: wallet.WalletAddress,
+				original:      wallet.Balance,
+				amountSent:    amount,
+			})
+		} else {
+			numTries++
 		}
 	}
-	return collectedAmount, nil
+
+	depositedAmount = utils.RoundFloat(depositedAmount, 2)
+
+	return depositedAmount, deposits, nil
 }
 
 func TestCreateCashPool(t *testing.T) {
@@ -90,12 +128,17 @@ func TestCreateCashPool(t *testing.T) {
 		t.Fatalf("Error creating wallet; %v\n", err)
 	}
 
-	cashPool, err := createCashPool(testServer.URL, tommy, tommysWallet)
+	cashPool, err := createCashPool(
+		tommy,
+		tommysWallet,
+		150,
+		time.Now().Add(1*time.Minute),
+	)
 	if err != nil {
 		t.Fatalf("Error creating cash pool; %v\n", err)
 	}
 
-	_, err = fundCashPool(cashPool)
+	_, _, err = fundCashPool(cashPool, cashPool.TargetAmount)
 	if err != nil {
 		t.Fatalf("Error funding cash pool; %v\n", err)
 	}
@@ -134,14 +177,28 @@ func TestCashPoolDeposit(t *testing.T) {
 		t.Fatalf("Error creating wallet; %v\n", err)
 	}
 
-	cashPool, err := createCashPool(testServer.URL, tommy, tommysWallet)
+	cashPool, err := createCashPool(
+		tommy,
+		tommysWallet,
+		150,
+		time.Now().Add(1*time.Minute),
+	)
 	if err != nil {
 		t.Fatalf("Error creating cash pool; %v\n", err)
 	}
 
-	_, err = fundCashPool(cashPool)
+	expectedAmount, _, err := fundCashPool(cashPool, cashPool.TargetAmount)
 	if err != nil {
 		t.Fatalf("Error funding cash pool; %v\n", err)
+	}
+
+	cashPool, err = getCashPool(cashPool.WalletAddress)
+	if err != nil {
+		t.Fatalf("Error fetching cash pool; %v\n", err)
+	}
+
+	if cashPool.CollectedAmount != expectedAmount {
+		t.Fatalf("Cash pool collected amount KSH %v does not equal expected amount KSH %v\n", cashPool.CollectedAmount, expectedAmount)
 	}
 
 	// Test sending more funds into cash pool after target amount is reached.
@@ -167,15 +224,16 @@ func TestCashPoolWithdrawal(t *testing.T) {
 	}
 
 	cashPool, err := createCashPool(
-		testServer.URL,
 		tommy,
 		tommysWallet,
+		150,
+		time.Now().Add(1*time.Minute),
 	)
 	if err != nil {
 		t.Fatalf("Error creating cash pool; %v\n", err)
 	}
 
-	collectedAmount, err := fundCashPool(cashPool)
+	collectedAmount, _, err := fundCashPool(cashPool, cashPool.TargetAmount)
 	if err != nil {
 		t.Fatalf("Error funding cash pool; %v\n", err)
 	}
@@ -228,4 +286,53 @@ func TestCashPoolWithdrawal(t *testing.T) {
 
 	expectStatus(t, resp, http.StatusInternalServerError)
 	resp.Body.Close()
+}
+
+func TestCashPoolRefund(t *testing.T) {
+	tommysWallet, err := createWallet(tommy)
+	if err != nil {
+		t.Fatalf("Error creating wallet; %v\n", err)
+	}
+
+	var targetAmount float64 = 150
+
+	cashPool, err := createCashPool(
+		tommy,
+		tommysWallet,
+		targetAmount,
+		time.Now().Add(5*time.Second),
+	)
+	if err != nil {
+		t.Fatalf("Error creating cash pool; %v\n", err)
+	}
+
+	// Fund cash pool halfway, then wait for it to expire.
+	_, cashPoolDeposits, err := fundCashPool(cashPool, targetAmount/2)
+	if err != nil {
+		t.Fatalf("Error funding cash pool; %v\n", err)
+	}
+
+	// Wait for cash pool to expire.
+	select {
+	case <-time.After(25 * time.Second):
+		t.Fatalf("Tired of waiting")
+
+	case <-time.After(20 * time.Second):
+		// All users who sent funds to the cash pool
+		// should be refunded.
+		for _, deposit := range cashPoolDeposits {
+			expectedBalance := deposit.original
+
+			wallet, err := getWallet(deposit.user, deposit.walletAddress)
+			if err != nil {
+				t.Errorf("Error fetching wallet; %v\n", err)
+				return
+			}
+
+			if wallet.Balance != expectedBalance {
+				t.Errorf("%v Wallet '%v' was never refunded KSH %v deposited into expired cash pool %v\n", COLOR_RED, wallet.WalletAddress, deposit.amountSent, COLOR_RESET)
+			}
+		}
+	}
+
 }

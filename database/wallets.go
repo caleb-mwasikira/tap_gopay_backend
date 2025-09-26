@@ -26,6 +26,7 @@ type walletType string
 const (
 	WALLET_ADDR_LEN int = 12
 
+	bankWallet     walletType = "00"
 	individual     walletType = "11"
 	multiSignature walletType = "22"
 	cashPool       walletType = "33"
