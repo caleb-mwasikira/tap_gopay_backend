@@ -48,6 +48,8 @@ func GetRoutes() *chi.Mux {
 			r.Get("/transactions/{transaction_code}", GetTransaction)
 			r.Post("/transactions/{transaction_code}/sign-transaction", SignTransaction)
 			r.Get("/verify-login", VerifyLogin)
+			r.Post("/new-cash-pool", CreateCashPool)
+			r.Get("/cash-pools/{wallet_address}", GetCashPool)
 		})
 	})
 	return r

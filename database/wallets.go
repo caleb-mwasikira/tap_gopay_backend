@@ -1,6 +1,7 @@
 package database
 
 import (
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"strings"
@@ -28,6 +29,10 @@ const (
 	individual     walletType = "11"
 	multiSignature walletType = "22"
 	cashPool       walletType = "33"
+)
+
+var (
+	ErrNoOwnership error = errors.New("this wallet does not belong to you")
 )
 
 func generateWalletAddress(walletTyp walletType) string {
@@ -330,7 +335,7 @@ func AddWalletOwner(
 	walletAddress string,
 ) error {
 	if !ownsWallet(loggedInUser, walletAddress) {
-		return fmt.Errorf("user does not currently own given wallet address")
+		return ErrNoOwnership
 	}
 
 	query := "INSERT INTO wallet_owners(user_id, wallet_address) VALUES(?, ?)"

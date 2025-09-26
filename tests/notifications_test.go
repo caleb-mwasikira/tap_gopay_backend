@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"testing"
 	"time"
@@ -20,7 +19,7 @@ func waitForNotifications(
 	serverUrl string,
 	notifications chan<- database.Transaction,
 ) error {
-	accessToken := requireLogin(user, serverUrl)
+	accessToken := requireLogin(user)
 
 	log.Printf("%v waiting for transaction notifications\n", user.Username)
 
@@ -59,19 +58,16 @@ func waitForNotifications(
 }
 
 func TestSubscribeNotifications(t *testing.T) {
-	testServer := httptest.NewServer(r)
-	defer testServer.Close()
-
 	// Get one of tommy's active wallets
-	tommysWallet, err := createWallet(testServer.URL, tommy)
+	tommysWallet, err := createWallet(tommy)
 	if err != nil {
-		t.Fatalf("Error fetching user's wallet; %v\n", err)
+		t.Fatalf("Error creating wallet; %v\n", err)
 	}
 
 	// Get one of lee's active wallets
-	leesWallet, err := createWallet(testServer.URL, lee)
+	leesWallet, err := createWallet(lee)
 	if err != nil {
-		t.Fatalf("Error fetching user's wallet; %v\n", err)
+		t.Fatalf("Error creating wallet; %v\n", err)
 	}
 
 	// Lee waits for received transactions
@@ -92,7 +88,6 @@ func TestSubscribeNotifications(t *testing.T) {
 
 	// Tommy sends money to lee
 	resp, err := sendMoney(
-		testServer.URL,
 		tommysWallet.WalletAddress,
 		leesWallet.WalletAddress,
 		tommy,

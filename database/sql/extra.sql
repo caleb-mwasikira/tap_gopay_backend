@@ -12,10 +12,6 @@ ALTER TABLE `request_funds` ADD PRIMARY KEY (`id`),
 ADD KEY `sender` (`sender`),
 ADD KEY `receiver` (`receiver`);
 
-ALTER TABLE `transactions` ADD PRIMARY KEY (`id`),
-ADD KEY `fk_transactions_receiver` (`receiver`),
-ADD KEY `fk_transactions_sender` (`sender`);
-
 ALTER TABLE `users` ADD PRIMARY KEY (`id`),
 ADD UNIQUE KEY `email` (`email`),
 ADD UNIQUE KEY `phone_no` (`phone_no`);
@@ -43,9 +39,6 @@ ALTER TABLE `public_keys` ADD CONSTRAINT `fk_public_keys_email` FOREIGN KEY (`em
 
 ALTER TABLE `request_funds` ADD CONSTRAINT `fk_request_funds_receiver` FOREIGN KEY (`receiver`) REFERENCES `wallets` (`wallet_address`) ON DELETE RESTRICT ON UPDATE RESTRICT,
 ADD CONSTRAINT `fk_request_funds_sender` FOREIGN KEY (`sender`) REFERENCES `wallets` (`wallet_address`) ON DELETE RESTRICT ON UPDATE RESTRICT;
-
-ALTER TABLE `transactions` ADD CONSTRAINT `fk_transactions_receiver` FOREIGN KEY (`receiver`) REFERENCES `wallets` (`wallet_address`) ON DELETE RESTRICT ON UPDATE RESTRICT,
-ADD CONSTRAINT `fk_transactions_sender` FOREIGN KEY (`sender`) REFERENCES `wallets` (`wallet_address`) ON DELETE RESTRICT ON UPDATE RESTRICT;
 
 --
 -- Indexes for table `wallets`

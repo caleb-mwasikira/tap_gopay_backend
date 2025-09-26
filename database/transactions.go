@@ -14,6 +14,7 @@ const (
 
 type WalletOwner struct {
 	Username      string `json:"username"`
+	Email         string `json:"email"`
 	PhoneNo       string `json:"phone_no"`
 	WalletAddress string `json:"wallet_address"`
 }
@@ -73,6 +74,10 @@ func CreateTransaction(
 	timestamp, signature string,
 	publicKeyHash string,
 ) (*Transaction, error) {
+	// if !ownsWallet(userId, sender) {
+	// 	return nil, ErrNoOwnership
+	// }
+
 	transactionCode := "TX-" + generateTransactionCode()
 
 	tx, err := db.Begin()
@@ -137,12 +142,12 @@ func GetTransaction(transactionCode string) (*Transaction, error) {
 	query := `
 		SELECT
 			transaction_code,
-			senders_username,
-			senders_phone,
-			senders_wallet_address,
-			receivers_username,
-			receivers_phone,
-			receivers_wallet_address,
+			sender_username,
+			sender_phone,
+			sender_wallet_address,
+			receiver_username,
+			receiver_phone,
+			receiver_wallet_address,
 			amount,
 			fee,
 			status,
@@ -183,12 +188,12 @@ func GetRecentTransactions(sendersAddress string) ([]*Transaction, error) {
 	query := `
 		SELECT
 			transaction_code,
-			senders_username,
-			senders_phone,
-			senders_wallet_address,
-			receivers_username,
-			receivers_phone,
-			receivers_wallet_address,
+			sender_username,
+			sender_phone,
+			sender_wallet_address,
+			receiver_username,
+			receiver_phone,
+			receiver_wallet_address,
 			amount,
 			fee,
 			timestamp,
@@ -196,8 +201,8 @@ func GetRecentTransactions(sendersAddress string) ([]*Transaction, error) {
 			public_key_hash,
 			created_at
 		FROM transaction_details
-		WHERE senders_wallet_address= ?
-		LIMIT 50
+		WHERE sender_wallet_address= ?
+		LIMIT 20
 	`
 	rows, err := db.Query(query, sendersAddress)
 	if err != nil {

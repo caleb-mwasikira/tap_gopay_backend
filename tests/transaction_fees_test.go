@@ -5,16 +5,38 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/caleb-mwasikira/tap_gopay_backend/database"
 	"github.com/caleb-mwasikira/tap_gopay_backend/handlers"
+	"github.com/caleb-mwasikira/tap_gopay_backend/utils"
 )
 
-func getTransactionFee(serverUrl string, amount float64) (float64, error) {
-	resp, err := http.Get(serverUrl + fmt.Sprintf("/transaction-fees?amount=%.2f", amount))
+func getAllTransactionFees(serverUrl string) ([]database.TransactionFee, error) {
+	resp, err := http.Get(serverUrl + "/all-transaction-fees")
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var fees []database.TransactionFee
+	err = json.NewDecoder(resp.Body).Decode(&fees)
+	return fees, err
+}
+
+func getTransactionFee(amount float64) (float64, error) {
+	fee := utils.FindOne(
+		cachedTransactionFees,
+		func(fee database.TransactionFee) bool {
+			return amount >= fee.MinAmount && amount <= fee.MaxAmount
+		},
+	)
+	if fee != nil {
+		return fee.Fee, nil
+	}
+
+	resp, err := http.Get(testServer.URL + fmt.Sprintf("/transaction-fees?amount=%.2f", amount))
 	if err != nil {
 		return 0, err
 	}
@@ -29,11 +51,8 @@ func getTransactionFee(serverUrl string, amount float64) (float64, error) {
 }
 
 func TestCreateTransactionFees(t *testing.T) {
-	testServer := httptest.NewServer(r)
-	defer testServer.Close()
-
 	// Test setting up transaction fees from non-admin account
-	requireLogin(lee, testServer.URL)
+	requireLogin(lee)
 
 	req := handlers.TransactionFeeRequest{
 		MinAmount:     100,
@@ -61,7 +80,7 @@ func TestCreateTransactionFees(t *testing.T) {
 	// Test setting up transaction fees from admin account
 	// Note: Make sure to setup tommy as an admin in the
 	// database for this request to work
-	requireLogin(tommy, testServer.URL)
+	requireLogin(tommy)
 
 	resp, err = http.Post(
 		testServer.URL+"/transaction-fees",
@@ -77,9 +96,6 @@ func TestCreateTransactionFees(t *testing.T) {
 }
 
 func TestGetAllTransactionFees(t *testing.T) {
-	testServer := httptest.NewServer(r)
-	defer testServer.Close()
-
 	resp, err := http.Get(testServer.URL + "/all-transaction-fees")
 	if err != nil {
 		t.Fatalf("Error making request; %v\n", err)

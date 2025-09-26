@@ -21,6 +21,9 @@ var (
 	r *chi.Mux
 
 	jsonContentType string = "application/json"
+	testServer      *httptest.Server
+
+	cachedTransactionFees []database.TransactionFee = []database.TransactionFee{}
 )
 
 const (
@@ -92,12 +95,14 @@ func randomString(length uint) string {
 
 func TestMain(m *testing.M) {
 	// Setup code here (runs once before tests)
-	err := database.TruncateTables()
+	tablesToSkip := []string{"transaction_fees"}
+
+	err := database.TruncateTables(tablesToSkip)
 	if err != nil {
 		log.Fatalf("Error truncating database tables; %v\n", err)
 	}
 
-	testServer := httptest.NewServer(r)
+	testServer = httptest.NewServer(r)
 	defer testServer.Close()
 
 	// Create test accounts for tommy, lee and bob
@@ -109,6 +114,12 @@ func TestMain(m *testing.M) {
 		}
 		resp.Body.Close()
 	}
+
+	fees, err := getAllTransactionFees(testServer.URL)
+	if err != nil {
+		log.Fatalf("Error fetching transaction fees; %v\n", err)
+	}
+	cachedTransactionFees = fees
 
 	// Run tests
 	code := m.Run()

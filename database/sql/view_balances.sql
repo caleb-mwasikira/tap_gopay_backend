@@ -32,7 +32,7 @@ SELECT
 
     -- Current balance calculation
     (
-        wl.initial_deposit
+        COALESCE(wl.initial_deposit, 0)
         + COALESCE(
             SUM(
                 CASE
@@ -64,6 +64,8 @@ SELECT
 
 FROM (
     SELECT DISTINCT wallet_address FROM wallets
+    UNION
+    SELECT DISTINCT wallet_address FROM cash_pools
 ) w
 LEFT JOIN transactions t
     ON (t.sender = w.wallet_address OR t.receiver = w.wallet_address)

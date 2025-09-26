@@ -11,7 +11,6 @@ import (
 	"log"
 	mrand "math/rand/v2"
 	"net/http"
-	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
@@ -22,8 +21,8 @@ import (
 	"github.com/nyaruka/phonenumbers"
 )
 
-func createWallet(serverUrl string, user User) (*database.Wallet, error) {
-	requireLogin(user, serverUrl)
+func createWallet(user User) (*database.Wallet, error) {
+	requireLogin(user)
 
 	req := handlers.CreateWalletRequest{
 		WalletName:    user.Username + randomString(6),
@@ -36,24 +35,22 @@ func createWallet(serverUrl string, user User) (*database.Wallet, error) {
 	}
 
 	resp, err := http.Post(
-		serverUrl+"/new-wallet", jsonContentType, bytes.NewBuffer(body),
+		testServer.URL+"/new-wallet", jsonContentType, bytes.NewBuffer(body),
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body = printResponse(resp, http.StatusOK)
-
 	// Check if request body contains created wallet
 	var wallet database.Wallet
 
-	err = json.Unmarshal(body, &wallet)
+	err = json.NewDecoder(resp.Body).Decode(&wallet)
 	return &wallet, err
 }
 
 func freezeWallet(serverUrl string, user User, walletAddress string) error {
-	requireLogin(user, serverUrl)
+	requireLogin(user)
 
 	url := serverUrl + fmt.Sprintf("/wallets/%v/freeze", walletAddress)
 	resp, err := http.Post(url, jsonContentType, nil)
@@ -66,24 +63,18 @@ func freezeWallet(serverUrl string, user User, walletAddress string) error {
 }
 
 func TestCreateWallet(t *testing.T) {
-	testServer := httptest.NewServer(r)
-	defer testServer.Close()
-
 	users := []User{tommy, lee}
 
 	for _, user := range users {
-		_, err := createWallet(testServer.URL, user)
+		_, err := createWallet(user)
 		if err != nil {
-			t.Fatalf("Error making request; %v\n", err)
+			t.Fatalf("Error creating wallet; %v\n", err)
 		}
 	}
 }
 
 func TestGetAllWallets(t *testing.T) {
-	testServer := httptest.NewServer(r)
-	defer testServer.Close()
-
-	requireLogin(tommy, testServer.URL)
+	requireLogin(tommy)
 
 	url := testServer.URL + "/wallets"
 	resp, err := http.Get(url)
@@ -119,7 +110,7 @@ func getAllWallets(
 	user User,
 	filter func(database.Wallet) bool,
 ) ([]database.Wallet, error) {
-	requireLogin(user, serverUrl)
+	requireLogin(user)
 
 	log.Println("Fetching user's wallets...")
 
@@ -152,9 +143,6 @@ func getAllWallets(
 }
 
 func TestGetWallet(t *testing.T) {
-	testServer := httptest.NewServer(r)
-	defer testServer.Close()
-
 	wallets, err := getAllWallets(
 		testServer.URL,
 		tommy,
@@ -195,19 +183,16 @@ func TestGetWallet(t *testing.T) {
 }
 
 func TestFreezeWallet(t *testing.T) {
-	testServer := httptest.NewServer(r)
-	defer testServer.Close()
-
 	// Create new wallet for tommy
-	tommysWallet, err := createWallet(testServer.URL, tommy)
+	tommysWallet, err := createWallet(tommy)
 	if err != nil {
-		t.Fatalf("Error fetching user's wallet; %v\n", err)
+		t.Fatalf("Error creating wallet; %v\n", err)
 	}
 
 	// Create new wallet for lee
-	leesWallet, err := createWallet(testServer.URL, lee)
+	leesWallet, err := createWallet(lee)
 	if err != nil {
-		t.Fatalf("Error fetching user's wallet; %v\n", err)
+		t.Fatalf("Error creating wallet; %v\n", err)
 	}
 
 	// Freeze tommys wallet
@@ -222,7 +207,6 @@ func TestFreezeWallet(t *testing.T) {
 	frozenWallet := tommysWallet
 
 	resp, err := sendMoney(
-		testServer.URL,
 		frozenWallet.WalletAddress,
 		leesWallet.WalletAddress,
 		tommy,
@@ -236,7 +220,6 @@ func TestFreezeWallet(t *testing.T) {
 
 	// Test: Attempt to send money to frozen wallet
 	resp, err = sendMoney(
-		testServer.URL,
 		leesWallet.WalletAddress,
 		frozenWallet.WalletAddress,
 		lee,
@@ -251,13 +234,10 @@ func TestFreezeWallet(t *testing.T) {
 }
 
 func TestActivateWallet(t *testing.T) {
-	testServer := httptest.NewServer(r)
-	defer testServer.Close()
-
 	// Create wallet
-	tommysWallet, err := createWallet(testServer.URL, tommy)
+	tommysWallet, err := createWallet(tommy)
 	if err != nil {
-		t.Fatalf("Error fetching user's wallet; %v", err)
+		t.Fatalf("Error creating wallet; %v", err)
 	}
 
 	// Freeze tommy's wallet
@@ -267,13 +247,13 @@ func TestActivateWallet(t *testing.T) {
 	}
 
 	// Fetch one of lee's active wallets
-	leesWallet, err := createWallet(testServer.URL, lee)
+	leesWallet, err := createWallet(lee)
 	if err != nil {
-		t.Fatalf("Error fetching user's wallet; %v", err)
+		t.Fatalf("Error creating wallet; %v", err)
 	}
 
 	// Activate tommy's frozen wallet
-	requireLogin(tommy, testServer.URL)
+	requireLogin(tommy)
 
 	resp, err := http.Post(
 		testServer.URL+fmt.Sprintf("/wallets/%v/activate", tommysWallet.WalletAddress),
@@ -289,7 +269,6 @@ func TestActivateWallet(t *testing.T) {
 
 	// Test: Attempt to send money using activated wallet
 	resp, err = sendMoney(
-		testServer.URL,
 		tommysWallet.WalletAddress,
 		leesWallet.WalletAddress,
 		tommy,
@@ -304,7 +283,6 @@ func TestActivateWallet(t *testing.T) {
 
 	// Test: Attempt to send money to activated wallet
 	resp, err = sendMoney(
-		testServer.URL,
 		leesWallet.WalletAddress,
 		tommysWallet.WalletAddress,
 		lee,
@@ -320,23 +298,20 @@ func TestActivateWallet(t *testing.T) {
 }
 
 func TestGetWalletsOwnedByPhoneNo(t *testing.T) {
-	testServer := httptest.NewServer(r)
-	defer testServer.Close()
-
 	// Create account for random user
 	user := NewRandomUser()
 	resp, err := createAccount(testServer.URL, user)
 	if err != nil {
-		t.Fatalf("Error making request; %v\n", err)
+		t.Fatalf("Error creating user account; %v\n", err)
 	}
 
 	expectStatus(t, resp, http.StatusOK)
 	resp.Body.Close()
 
 	// Create wallet for random user
-	originalWallet, err := createWallet(testServer.URL, user)
+	originalWallet, err := createWallet(user)
 	if err != nil {
-		t.Fatalf("Error making request; %v\n", err)
+		t.Fatalf("Error creating wallet; %v\n", err)
 	}
 
 	// Get wallet tied to user's phone number
@@ -411,7 +386,7 @@ func createMultiSigWallet(
 	user User,
 	totalOwners, numSignatures uint,
 ) (*database.Wallet, error) {
-	requireLogin(user, serverUrl)
+	requireLogin(user)
 
 	req := handlers.CreateWalletRequest{
 		WalletName:    user.Username + randomString(6),
@@ -445,7 +420,7 @@ func signTransaction(
 	user User,
 	transaction database.Transaction,
 ) (*http.Response, error) {
-	requireLogin(user, serverUrl)
+	requireLogin(user)
 
 	// Load user's private key from file
 	privKey, err := getPrivateKey(user.Email)
@@ -483,9 +458,6 @@ func signTransaction(
 }
 
 func TestCreateMultiSigWallet(t *testing.T) {
-	testServer := httptest.NewServer(r)
-	defer testServer.Close()
-
 	const totalOwners uint = 2
 	const numSignatures uint = 2
 	tommysWallet, err := createMultiSigWallet(
@@ -517,13 +489,12 @@ func TestCreateMultiSigWallet(t *testing.T) {
 	resp.Body.Close()
 
 	// Test: Send money from tommy's wallet -> lee's wallet as lee
-	leesWallet, err := createWallet(testServer.URL, lee)
+	leesWallet, err := createWallet(lee)
 	if err != nil {
 		t.Fatalf("Error creating wallet; %v\n", err)
 	}
 
 	resp, err = sendMoney(
-		testServer.URL,
 		tommysWallet.WalletAddress,
 		leesWallet.WalletAddress,
 		lee,
@@ -569,9 +540,6 @@ func TestCreateMultiSigWallet(t *testing.T) {
 }
 
 func TestRemoveWalletOwner(t *testing.T) {
-	testServer := httptest.NewServer(r)
-	defer testServer.Close()
-
 	const totalOwners uint = 2
 	const numSignatures uint = 2
 	tommysWallet, err := createMultiSigWallet(
@@ -615,14 +583,13 @@ func TestRemoveWalletOwner(t *testing.T) {
 	expectStatus(t, resp, http.StatusOK)
 	resp.Body.Close()
 
-	lessWallet, err := createWallet(testServer.URL, lee)
+	lessWallet, err := createWallet(lee)
 	if err != nil {
 		t.Fatalf("Error creating wallet; %v\n", err)
 	}
 
 	// Try sending funds from tommy's wallet to lee's wallet
 	resp, err = sendMoney(
-		testServer.URL,
 		tommysWallet.WalletAddress,
 		lessWallet.WalletAddress,
 		lee,
@@ -634,4 +601,32 @@ func TestRemoveWalletOwner(t *testing.T) {
 
 	expectStatus(t, resp, http.StatusInternalServerError)
 	resp.Body.Close()
+}
+
+func TestWalletOwnership(t *testing.T) {
+	tommysWallet, err := createWallet(tommy)
+	if err != nil {
+		t.Fatalf("Error creating wallet; %v\n", err)
+	}
+
+	leesWallet, err := createWallet(tommy)
+	if err != nil {
+		t.Fatalf("Error creating wallet; %v\n", err)
+	}
+
+	// Try sending funds from tommysWallet -> leesWallet as lee
+	// Basically stealing funds
+	resp, err := sendMoney(
+		tommysWallet.WalletAddress,
+		leesWallet.WalletAddress,
+		lee,
+		1,
+	)
+	if err != nil {
+		t.Fatalf("Error transferring funds; %v\n", err)
+	}
+	defer resp.Body.Close()
+
+	expectStatus(t, resp, http.StatusInternalServerError)
+
 }

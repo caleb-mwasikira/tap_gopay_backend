@@ -8,7 +8,6 @@ import (
 	"log"
 	"math/rand/v2"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"path/filepath"
 	"strings"
@@ -100,9 +99,6 @@ func createAccount(serverUrl string, user User) (*http.Response, error) {
 }
 
 func TestRegister(t *testing.T) {
-	testServer := httptest.NewServer(r)
-	defer testServer.Close()
-
 	user := NewRandomUser()
 
 	resp, err := createAccount(testServer.URL, user)
@@ -115,9 +111,6 @@ func TestRegister(t *testing.T) {
 }
 
 func TestLogin(t *testing.T) {
-	testServer := httptest.NewServer(r)
-	defer testServer.Close()
-
 	// Try accessing protected resource without logging in
 	resp, err := http.Get(testServer.URL + "/verify-login")
 	if err != nil {
@@ -194,11 +187,11 @@ func TestLogin(t *testing.T) {
 // Logs in to a users account.
 // Sets any cookies returned from server to DefaultClient.Jar
 // Returns access token to caller in case they require it
-func requireLogin(user User, serverUrl string) string {
+func requireLogin(user User) string {
 	// Check if user logged in before
 	cookies, ok := cookiesCache[user.Email]
 	if ok {
-		url, err := url.Parse(serverUrl)
+		url, err := url.Parse(testServer.URL)
 		if err != nil {
 			log.Fatalf("Error parsing url; %v\n", err)
 		}
@@ -235,7 +228,7 @@ func requireLogin(user User, serverUrl string) string {
 		log.Fatalf("Error marshalling login request; %v\n", err)
 	}
 
-	resp, err := http.Post(serverUrl+"/auth/login", jsonContentType, bytes.NewBuffer(body))
+	resp, err := http.Post(testServer.URL+"/auth/login", jsonContentType, bytes.NewBuffer(body))
 	if err != nil {
 		log.Fatalf("Error making login request; %v\n", err)
 	}
@@ -248,7 +241,7 @@ func requireLogin(user User, serverUrl string) string {
 	// Extract login cookies and set them in cookiejar
 	cookies = resp.Cookies()
 
-	url, err := url.Parse(serverUrl)
+	url, err := url.Parse(testServer.URL)
 	if err != nil {
 		log.Fatalf("Error parsing url; %v\n", err)
 	}

@@ -150,7 +150,7 @@ func MigrateDatabase(rootUser, rootPassword string) error {
 	return nil
 }
 
-func TruncateTables() error {
+func TruncateTables(tablesToSkip []string) error {
 	rows, err := db.Query("SHOW TABLES")
 	if err != nil {
 		return err
@@ -176,6 +176,11 @@ func TruncateTables() error {
 	defer db.Exec("SET FOREIGN_KEY_CHECKS = 1") // re-enable after
 
 	for _, table := range tables {
+		if slices.Contains(tablesToSkip, table) {
+			log.Printf("Skipping truncation for table %s\n", table)
+			continue
+		}
+
 		query := fmt.Sprintf("TRUNCATE TABLE `%s`", table)
 
 		if _, err := db.Exec(query); err != nil {

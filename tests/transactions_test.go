@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"net/http/httptest"
 	"path/filepath"
 	"testing"
 	"time"
@@ -48,15 +47,14 @@ func signPayload(email string, data []byte) ([]byte, []byte, error) {
 }
 
 func sendMoney(
-	serverUrl string,
 	sender string,
 	receiver string,
 	loginUser User,
 	amount float64,
 ) (*http.Response, error) {
-	requireLogin(loginUser, serverUrl)
+	requireLogin(loginUser)
 
-	fee, err := getTransactionFee(serverUrl, amount)
+	fee, err := getTransactionFee(amount)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching transaction fees; %v", err)
 	}
@@ -69,7 +67,7 @@ func sendMoney(
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	}
 
-	log.Printf("Sending funds from '%v' to '%v'\n", sender, receiver)
+	log.Printf("Sending KSH %.2f funds from '%v' to '%v'\n", amount, sender, receiver)
 
 	// Sign transaction details
 	signature, pubKeyHash, err := signPayload(loginUser.Email, req.Hash())
@@ -85,26 +83,22 @@ func sendMoney(
 		return nil, err
 	}
 
-	return http.Post(serverUrl+"/send-money", jsonContentType, bytes.NewBuffer(body))
+	return http.Post(testServer.URL+"/send-money", jsonContentType, bytes.NewBuffer(body))
 }
 
 func TestSendMoney(t *testing.T) {
-	testServer := httptest.NewServer(r)
-	defer testServer.Close()
-
-	tommysWallet, err := createWallet(testServer.URL, tommy)
+	tommysWallet, err := createWallet(tommy)
 	if err != nil {
-		t.Fatalf("Error fetching users wallet; %v\n", err)
+		t.Fatalf("Error creating wallet; %v\n", err)
 	}
 
-	leesWallet, err := createWallet(testServer.URL, lee)
+	leesWallet, err := createWallet(lee)
 	if err != nil {
-		t.Fatalf("Error fetching users wallet; %v\n", err)
+		t.Fatalf("Error creating wallet; %v\n", err)
 	}
 
 	// Test: Transfer funds from one wallet to another
 	resp, err := sendMoney(
-		testServer.URL,
 		tommysWallet.WalletAddress,
 		leesWallet.WalletAddress,
 		tommy,
@@ -119,21 +113,17 @@ func TestSendMoney(t *testing.T) {
 }
 
 func TestSendMoneyViaPhoneNo(t *testing.T) {
-	testServer := httptest.NewServer(r)
-	defer testServer.Close()
-
-	tommysWallet, err := createWallet(testServer.URL, tommy)
+	tommysWallet, err := createWallet(tommy)
 	if err != nil {
-		t.Fatalf("Error fetching users wallet; %v\n", err)
+		t.Fatalf("Error creating wallet; %v\n", err)
 	}
 
-	leesWallet, err := createWallet(testServer.URL, lee)
+	leesWallet, err := createWallet(lee)
 	if err != nil {
-		t.Fatalf("Error fetching users wallet; %v\n", err)
+		t.Fatalf("Error creating wallet; %v\n", err)
 	}
 
 	resp, err := sendMoney(
-		testServer.URL,
 		tommysWallet.PhoneNo,
 		leesWallet.PhoneNo,
 		tommy,
@@ -161,17 +151,14 @@ func getTransactions(serverUrl, walletAddress string) ([]database.Transaction, e
 }
 
 func TestGetRecentTransactions(t *testing.T) {
-	testServer := httptest.NewServer(r)
-	defer testServer.Close()
-
 	// Fetch one of tommy's wallets
-	tommysWallet, err := createWallet(testServer.URL, tommy)
+	tommysWallet, err := createWallet(tommy)
 	if err != nil {
-		t.Fatalf("Error fetching user's wallet; %v\n", err)
+		t.Fatalf("Error creating wallet; %v\n", err)
 	}
 
 	// Get all transactions made by that wallet
-	requireLogin(tommy, testServer.URL)
+	requireLogin(tommy)
 
 	_, err = getTransactions(testServer.URL, tommysWallet.WalletAddress)
 	if err != nil {
@@ -180,15 +167,12 @@ func TestGetRecentTransactions(t *testing.T) {
 }
 
 func TestGetTransaction(t *testing.T) {
-	testServer := httptest.NewServer(r)
-	defer testServer.Close()
-
-	requireLogin(tommy, testServer.URL)
+	requireLogin(tommy)
 
 	// Fetch one of tommy's wallet
-	tommysWallet, err := createWallet(testServer.URL, tommy)
+	tommysWallet, err := createWallet(tommy)
 	if err != nil {
-		t.Fatalf("Error fetching user's wallet; %v\n", err)
+		t.Fatalf("Error creating wallet; %v\n", err)
 	}
 
 	// Get all transactions made by tommy's wallet
@@ -219,24 +203,20 @@ func TestGetTransaction(t *testing.T) {
 }
 
 func TestSendingInvalidAmount(t *testing.T) {
-	testServer := httptest.NewServer(r)
-	defer testServer.Close()
-
 	// Create wallet for lee
-	leesWallet, err := createWallet(testServer.URL, lee)
+	leesWallet, err := createWallet(lee)
 	if err != nil {
-		t.Fatalf("Error making request; %v\n", err)
+		t.Fatalf("Error creating wallet; %v\n", err)
 	}
 
 	// Create wallet for tommy
-	tommysWallet, err := createWallet(testServer.URL, tommy)
+	tommysWallet, err := createWallet(tommy)
 	if err != nil {
-		t.Fatalf("Error making request; %v\n", err)
+		t.Fatalf("Error creating wallet; %v\n", err)
 	}
 
 	// Test sending amount > INITIAL_DEPOSIT
 	resp, err := sendMoney(
-		testServer.URL,
 		tommysWallet.WalletAddress,
 		leesWallet.WalletAddress,
 		tommy,
@@ -251,7 +231,6 @@ func TestSendingInvalidAmount(t *testing.T) {
 
 	// Test sending negative amount
 	resp, err = sendMoney(
-		testServer.URL,
 		tommysWallet.WalletAddress,
 		leesWallet.WalletAddress,
 		tommy,

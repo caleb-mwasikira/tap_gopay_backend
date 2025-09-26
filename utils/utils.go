@@ -95,11 +95,16 @@ func ValidateAddress(address string) error {
 	return nil
 }
 
-// Returns elements from items which predicate is true and
-// elements from items which predicate is false
+// Returns elements from slice where predicate is true and
+// elements from slice where predicate is false.
+// If predicate == nil returns 2 empty slices
 func Filter[T any](items []T, predicate func(item T) bool) ([]T, []T) {
 	meetsPredicate := []T{}
 	doesntMeetPredicate := []T{}
+
+	if predicate == nil {
+		return meetsPredicate, doesntMeetPredicate
+	}
 
 	for _, item := range items {
 		if predicate(item) {
@@ -109,4 +114,23 @@ func Filter[T any](items []T, predicate func(item T) bool) ([]T, []T) {
 		}
 	}
 	return meetsPredicate, doesntMeetPredicate
+}
+
+// roundFloat rounds a float64 to a specified number of decimal places.
+func RoundFloat(val float64, precision uint) float64 {
+	ratio := math.Pow(10, float64(precision))
+	return math.Round(val*ratio) / ratio
+}
+
+func FindOne[T any](items []T, predicate func(item T) bool) *T {
+	if predicate == nil {
+		return nil
+	}
+
+	for _, item := range items {
+		if predicate(item) {
+			return &item
+		}
+	}
+	return nil
 }

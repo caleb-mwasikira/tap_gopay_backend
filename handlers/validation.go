@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/caleb-mwasikira/tap_gopay_backend/encrypt"
@@ -120,6 +121,21 @@ func validateStruct(obj any) error {
 				str, _ := fieldValue.(string)
 				if err := validatePeriod(str); err != nil {
 					return err
+				}
+			}
+			if rule == "expiry" {
+				str, ok := fieldValue.(string)
+				if !ok {
+					return fmt.Errorf("invalid expiry format; expected RFC3339 string")
+				}
+
+				expiresAt, err := time.Parse(time.RFC3339, str)
+				if err != nil {
+					return fmt.Errorf("invalid expiry format; expected RFC3339 string")
+				}
+
+				if expiresAt.Before(time.Now()) {
+					return fmt.Errorf("invalid expiry time; expiry time already passed")
 				}
 			}
 		}

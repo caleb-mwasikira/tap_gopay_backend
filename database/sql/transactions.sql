@@ -33,50 +33,6 @@ CREATE TRIGGER `updateTransactionStatus` BEFORE UPDATE ON `transactions`
     END IF;
 END;
 
-CREATE TRIGGER `verifyCashPoolTransactions` BEFORE INSERT ON `transactions`
- FOR EACH ROW BEGIN
-	DECLARE var_withdrawing_cash_pool BOOLEAN;
-    DECLARE var_depositing_cash_pool BOOLEAN;
-    DECLARE var_target_amount DECIMAL(10,2);
-    DECLARE var_collected_amount DECIMAL(10,2);
-    DECLARE var_cash_pool_status TEXT;
-
-    SET var_withdrawing_cash_pool = (NEW.sender LIKE '0xp00l%');
-    SET var_depositing_cash_pool = (NEW.receiver LIKE '0xp00l%');
-
-    IF var_withdrawing_cash_pool THEN
-        -- Fetch cash pool target amount
-        SELECT target_amount
-        INTO var_target_amount
-        FROM cash_pools WHERE wallet_address = NEW.sender;
-
-        -- Fetch total amount collected into cash pool
-        SELECT COALESCE(SUM(amount),0)
-        INTO var_collected_amount
-        FROM transactions
-        WHERE receiver = NEW.sender;
-
-        -- Restrict withdrawal from cash pool if target amount is not achieved
-        IF var_collected_amount < var_target_amount THEN
-            SIGNAL SQLSTATE '45000'
-            SET MESSAGE_TEXT="Withdrawals from cash pool restricted until target amount is achieved";
-        END IF;
-
-    ELSEIF var_depositing_cash_pool THEN
-        -- Check if cash pool is still open
-        SELECT status
-        INTO var_cash_pool_status
-        FROM cash_pools WHERE wallet_address = NEW.receiver;
-
-        IF var_cash_pool_status <> "open" THEN
-            SIGNAL SQLSTATE '45000'
-            SET MESSAGE_TEXT="Cash pool no longer open for depositing funds";
-        END IF;
-
-    END IF;
-
-END;
-
 CREATE TRIGGER `verifyTransaction` BEFORE INSERT ON `transactions`
 FOR EACH ROW BEGIN
     DECLARE var_senders_balance DECIMAL(10,2);
@@ -116,6 +72,98 @@ FOR EACH ROW BEGIN
     IF var_amount > var_senders_balance THEN
         SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = "Insufficient funds to complete transaction";
+    END IF;
+
+END;
+
+CREATE TRIGGER `verifyCashPoolTransactions` BEFORE INSERT ON `transactions`
+FOR EACH ROW BEGIN
+    DECLARE is_withdrawing_from_cash_pool BOOLEAN;
+    DECLARE is_depositing_into_cash_pool BOOLEAN;
+    DECLARE var_target_amount DECIMAL(10,2);
+    DECLARE var_collected_amount DECIMAL(10,2);
+    DECLARE var_cash_pool_status TEXT;
+    DECLARE var_cash_pool_balance DECIMAL(10,2);
+    DECLARE var_cash_pool_receiver VARCHAR(255);
+
+    SET is_withdrawing_from_cash_pool = (NEW.sender LIKE '33%');
+    SET is_depositing_into_cash_pool = (NEW.receiver LIKE '33%');
+
+    IF is_withdrawing_from_cash_pool THEN
+        SELECT target_amount, receiver
+        INTO var_target_amount, var_cash_pool_receiver
+        FROM cash_pools WHERE wallet_address = NEW.sender;
+
+        -- Check that funds being sent to correct receiver
+        IF NEW.receiver != var_cash_pool_receiver THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT="The recipient address you entered is invalid. Please check and try again.";
+        END IF;
+
+        SELECT balance
+        INTO var_cash_pool_balance
+        FROM balances
+        WHERE wallet_address= NEW.sender;
+
+        -- Check if cash pool has enough funds to withdraw
+        IF (NEW.amount + NEW.fee) > var_cash_pool_balance THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT="Insufficient funds in cash pool to complete transaction";
+        END IF;
+
+        SELECT COALESCE(SUM(amount),0)
+        INTO var_collected_amount
+        FROM transactions
+        WHERE receiver = NEW.sender;
+
+        -- Restrict withdrawal from cash pool if target amount is not achieved
+        IF var_collected_amount < var_target_amount THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT="Withdrawals from cash pool restricted until target amount is achieved";
+        END IF;
+    END IF;
+
+    IF is_depositing_into_cash_pool THEN
+        -- Check if cash pool is still open
+        SELECT status
+        INTO var_cash_pool_status
+        FROM cash_pools WHERE wallet_address = NEW.receiver;
+
+        IF var_cash_pool_status <> "open" THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT="Cash pool no longer open for depositing funds";
+        END IF;
+    END IF;
+
+END
+
+CREATE TRIGGER `updateCashPool` BEFORE UPDATE ON `transactions`
+FOR EACH ROW BEGIN
+    DECLARE var_target_amount DECIMAL(10,2);
+    DECLARE var_collected_amount DECIMAL(10,2);
+    DECLARE is_depositing_into_cash_pool TINYINT(1);
+
+    -- Check if receiver is a cash pool
+    SET is_depositing_into_cash_pool = (NEW.receiver LIKE '33%');
+
+    IF NEW.status = 'confirmed' AND is_depositing_into_cash_pool THEN
+        -- Add to collected amount
+        UPDATE cash_pools
+        SET collected_amount = collected_amount + NEW.amount
+        WHERE wallet_address = NEW.receiver;
+
+        -- Fetch target and collected amount
+        SELECT target_amount, collected_amount
+        INTO var_target_amount, var_collected_amount
+        FROM cash_pools
+        WHERE wallet_address = NEW.receiver;
+
+        -- Check if target reached
+        IF var_collected_amount >= var_target_amount THEN
+            UPDATE cash_pools
+            SET status = 'funded'
+            WHERE wallet_address = NEW.receiver;
+        END IF;
     END IF;
 
 END;
