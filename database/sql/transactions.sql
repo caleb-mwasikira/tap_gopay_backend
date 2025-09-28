@@ -128,7 +128,7 @@ BEGIN
             SET MESSAGE_TEXT = 'Minimum transferable amount is KSH 1.0';
     END IF;
 
-    -- Fetch sender’s balance
+    -- Fetch sender's balance
     CALL getWalletBalance(NEW.sender, @balance);
     SELECT @balance INTO var_senders_balance;
 
@@ -154,21 +154,16 @@ FOR EACH ROW BEGIN
     SET is_depositing_into_cash_pool = (NEW.receiver LIKE '33%');
 
     IF is_withdrawing_from_cash_pool THEN
-        SELECT target_amount, receiver
-        INTO var_target_amount, var_cash_pool_receiver
-        FROM cash_pools WHERE wallet_address = NEW.sender;
+        SELECT target_amount, receivers_wallet_address, collected_amount
+        INTO var_target_amount, var_cash_pool_receiver, var_collected_amount
+        FROM cash_pool_details WHERE wallet_address = NEW.sender;
 
         IF NEW.transaction_type= 'transfer' THEN
             -- Check that funds are being sent to correct receiver
-            IF NEW.receiver != var_cash_pool_receiver THEN
+            IF var_cash_pool_receiver != NEW.receiver THEN
                 SIGNAL SQLSTATE '45000'
-                SET MESSAGE_TEXT="The recipient address you entered is invalid. Please check and try again.";
+                SET MESSAGE_TEXT="Receiver specified does not match the expected recipient for this payment";
             END IF;
-
-            SELECT COALESCE(SUM(amount),0)
-            INTO var_collected_amount
-            FROM transactions
-            WHERE receiver = NEW.sender;
 
             -- Restrict withdrawal from cash pool if target amount is not achieved
             IF var_collected_amount < var_target_amount THEN
@@ -190,15 +185,21 @@ FOR EACH ROW BEGIN
     END IF;
 
     IF is_depositing_into_cash_pool THEN
-        -- Check if cash pool is still open
-        SELECT status
-        INTO var_cash_pool_status
-        FROM cash_pools WHERE wallet_address = NEW.receiver;
+        SELECT status, target_amount, collected_amount
+        INTO var_cash_pool_status, var_target_amount, var_collected_amount
+        FROM cash_pool_details WHERE wallet_address = NEW.receiver;
 
         IF var_cash_pool_status <> "open" THEN
             SIGNAL SQLSTATE '45000'
             SET MESSAGE_TEXT="Cash pool no longer open for depositing funds";
         END IF;
+
+        -- Check if target amount being exceeded
+        IF var_collected_amount >= var_target_amount THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT="Cash pool has already reached its funding goal";
+        END IF;
+
     END IF;
 
 END
@@ -213,15 +214,10 @@ FOR EACH ROW BEGIN
     SET is_depositing_into_cash_pool = (NEW.receiver LIKE '33%');
 
     IF NEW.status = 'confirmed' AND is_depositing_into_cash_pool THEN
-        -- Add to collected amount
-        UPDATE cash_pools
-        SET collected_amount = collected_amount + NEW.amount
-        WHERE wallet_address = NEW.receiver;
-
         -- Fetch target and collected amount
         SELECT target_amount, collected_amount
         INTO var_target_amount, var_collected_amount
-        FROM cash_pools
+        FROM cash_pool_details
         WHERE wallet_address = NEW.receiver;
 
         -- Check if target reached

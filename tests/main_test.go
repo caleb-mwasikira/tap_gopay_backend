@@ -123,7 +123,7 @@ func TestMain(m *testing.M) {
 	// Create test accounts for tommy, lee and bob
 	users := []User{tommy, lee, bob}
 	for _, user := range users {
-		resp, err := createAccount(testServer.URL, user)
+		resp, err := createAccount(user)
 		if err != nil {
 			log.Fatalf("Error creating test accounts; %v\n", err)
 		}

@@ -9,8 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"slices"
-	"strings"
 
 	"github.com/caleb-mwasikira/tap_gopay_backend/api"
 	"github.com/caleb-mwasikira/tap_gopay_backend/database"
@@ -152,7 +150,7 @@ func SendMoney(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go notifyInterestedParties(*transaction)
+	go sendNotification(*transaction)
 
 	switch transaction.Status {
 	case "confirmed":
@@ -213,10 +211,9 @@ func GetTransaction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	transactionCode := chi.URLParam(r, "transaction_code")
-	transactionCode = strings.TrimSpace(transactionCode)
 
-	if len(transactionCode) < database.TRANSACTION_ID_LEN {
-		api.BadRequest(w, "Invalid transaction id", nil)
+	if !database.IsSenderOrReceiver(user.Id, transactionCode) {
+		api.NotFound(w, fmt.Sprintf("Transaction '%v' not found", transactionCode))
 		return
 	}
 
@@ -226,40 +223,13 @@ func GetTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get involved parties
-	involvedParties, err := database.GetWalletOwners(t.Sender.WalletAddress, t.Receiver.WalletAddress)
-	if err != nil {
-		api.Errorf(w, "Error fetching involved parties in transaction", err)
-		return
-	}
-
-	// A user is authorized to view transaction details
-	// if they are among involved parties
-	if !slices.Contains(involvedParties, user.Id) {
-		api.Unauthorized(w, "You are not authorized to view transaction details")
-		return
-	}
-
 	api.OK2(w, t)
 }
 
 func GetRecentTransactions(w http.ResponseWriter, r *http.Request) {
-	user, ok := getAuthUser(r)
-	if !ok {
-		api.Unauthorized(w, "Access to this route requires user login")
-		return
-	}
-
 	walletAddress := chi.URLParam(r, "wallet_address")
 	if err := validateWalletAddress(walletAddress); err != nil {
 		api.BadRequest(w, err.Error(), nil)
-		return
-	}
-
-	// Check if wallet address belongs to logged in user
-	ok = database.WalletExists(user.Id, walletAddress)
-	if !ok {
-		api.Unauthorized(w, "Access to this route requires user login")
 		return
 	}
 

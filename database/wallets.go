@@ -1,7 +1,6 @@
 package database
 
 import (
-	"errors"
 	"fmt"
 	"math/rand/v2"
 	"strings"
@@ -30,10 +29,6 @@ const (
 	individual     walletType = "11"
 	multiSignature walletType = "22"
 	cashPool       walletType = "33"
-)
-
-var (
-	ErrNoOwnership error = errors.New("this wallet does not belong to you")
 )
 
 func generateWalletAddress(walletTyp walletType) string {
@@ -113,18 +108,6 @@ func CreateWallet(
 	}
 
 	return GetWallet(userId, walletAddress)
-}
-
-func WalletExists(userId int, walletAddress string) bool {
-	var exists bool
-	query := "SELECT EXISTS(SELECT 1 FROM wallet_owners WHERE user_id= ? AND wallet_address= ?)"
-
-	row := db.QueryRow(query, userId, walletAddress)
-	err := row.Scan(&exists)
-	if err != nil {
-		return false
-	}
-	return exists
 }
 
 func GetWallet(userId int, walletAddress string) (*Wallet, error) {
@@ -257,7 +240,7 @@ func GetAllWallets(userId int) ([]*Wallet, error) {
 	return wallets, nil
 }
 
-func ownsWallet(userId int, walletAddress string) bool {
+func OwnsWallet(userId int, walletAddress string) bool {
 	var exists bool
 
 	query := "SELECT EXISTS(SELECT 1 FROM wallet_owners WHERE user_id= ? AND wallet_address= ?)"
@@ -273,29 +256,18 @@ func ownsWallet(userId int, walletAddress string) bool {
 	return exists
 }
 
-func FreezeWallet(userId int, walletAddress string) error {
-	var err error
-
-	if ownsWallet(userId, walletAddress) {
-		query := "UPDATE wallets SET is_active= 0 WHERE wallet_address= ?"
-		_, err = db.Exec(query, walletAddress)
-	}
-
+func FreezeWallet(walletAddress string) error {
+	query := "UPDATE wallets SET is_active= 0 WHERE wallet_address= ?"
+	_, err := db.Exec(query, walletAddress)
 	return err
 }
 
-func ActivateWallet(userId int, walletAddress string) error {
-	var err error
-
-	if ownsWallet(userId, walletAddress) {
-		query := "UPDATE wallets SET is_active= 1 WHERE wallet_address= ?"
-		_, err = db.Exec(query, walletAddress)
-	}
-
+func ActivateWallet(walletAddress string) error {
+	query := "UPDATE wallets SET is_active= 1 WHERE wallet_address= ?"
+	_, err := db.Exec(query, walletAddress)
 	return err
 }
 
-// Returns the user id's of users owning provided wallet addresses
 func GetWalletOwners(walletAddresses ...string) ([]int, error) {
 	if len(walletAddresses) == 0 {
 		return []int{}, nil
@@ -335,10 +307,6 @@ func AddWalletOwner(
 	userId int,
 	walletAddress string,
 ) error {
-	if !ownsWallet(loggedInUser, walletAddress) {
-		return ErrNoOwnership
-	}
-
 	query := "INSERT INTO wallet_owners(user_id, wallet_address) VALUES(?, ?)"
 	_, err := db.Exec(query, userId, walletAddress)
 	return err

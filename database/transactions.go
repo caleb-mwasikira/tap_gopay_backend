@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	TRANSACTION_ID_LEN int = 12
+	MIN_TRANSACION_CODE_LEN int = 12
 )
 
 type WalletOwner struct {
@@ -43,22 +43,34 @@ func (t Transaction) Hash() []byte {
 	return h[:]
 }
 
-func generateRandomChar() string {
-	// Generate a random integer between 65 and 90 (inclusive)
-	randInt := 65 + rand.Intn(90-65+1)
+func randomChar() string {
+	min := 65 // ASCII value 'A'
+	max := 90 // ASCII value 'Z'
+
+	randInt := min + rand.Intn(max-min+1)
 	randomChar := rune(randInt)
 	return fmt.Sprintf("%c", randomChar)
 }
 
-func generateTransactionCode() string {
+type transactionType string
+
+const (
+	transfer     transactionType = "TX"
+	requestFunds transactionType = "RX"
+	refund       transactionType = "REF"
+)
+
+func generateTransactionCode(transactionTyp transactionType) string {
 	rand.NewSource(time.Now().UnixNano())
 
 	str := strings.Builder{}
-	var value string
+	str.WriteString(string(transactionTyp) + "-")
 
-	for range TRANSACTION_ID_LEN {
+	for range MIN_TRANSACION_CODE_LEN {
+		var value string
+
 		if rand.Float32() > 0.3 {
-			value = generateRandomChar()
+			value = randomChar()
 		} else {
 			value = fmt.Sprintf("%d", rand.Intn(9))
 		}
@@ -76,11 +88,7 @@ func CreateTransaction(
 	b64EncodedSignature string,
 	b64EncodedPublicKeyHash string,
 ) (*Transaction, error) {
-	// if !ownsWallet(userId, sender) {
-	// 	return nil, ErrNoOwnership
-	// }
-
-	transactionCode := "TX-" + generateTransactionCode()
+	transactionCode := generateTransactionCode(transfer)
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -116,7 +124,6 @@ func CreateTransaction(
 		return nil, err
 	}
 
-	// Add signature into signatures table
 	query = `
 	INSERT INTO signatures(
 		transaction_id,
@@ -154,7 +161,7 @@ func CreateRefundTransaction(
 	b64EncodedSignature string,
 	b64EncodedPublicKeyHash string,
 ) (*Transaction, error) {
-	transactionCode := "REF-" + generateTransactionCode()
+	transactionCode := generateTransactionCode(refund)
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -194,7 +201,6 @@ func CreateRefundTransaction(
 		return nil, err
 	}
 
-	// Add signature into signatures table
 	query = `
 	INSERT IGNORE INTO signatures(
 		transaction_id,
@@ -273,7 +279,7 @@ func GetTransaction(transactionCode string) (*Transaction, error) {
 	return &t, nil
 }
 
-func GetRecentTransactions(sendersAddress string) ([]*Transaction, error) {
+func GetRecentTransactions(walletAddress string) ([]*Transaction, error) {
 	query := `
 		SELECT
 			transaction_code,
@@ -293,7 +299,7 @@ func GetRecentTransactions(sendersAddress string) ([]*Transaction, error) {
 		WHERE sender_wallet_address= ?
 		LIMIT 20
 	`
-	rows, err := db.Query(query, sendersAddress)
+	rows, err := db.Query(query, walletAddress)
 	if err != nil {
 		return nil, err
 	}
@@ -349,7 +355,7 @@ func CreateRequestFunds(
 	b64EncodedSignature string,
 	b64EncodedPublicKeyHash string,
 ) (*RequestFundsResult, error) {
-	transactionCode := "RX-" + generateTransactionCode()
+	transactionCode := generateTransactionCode(requestFunds)
 
 	t := RequestFundsResult{
 		TransactionCode: transactionCode,
@@ -382,4 +388,18 @@ func CreateRequestFunds(
 		t.PublicKeyId,
 	)
 	return &t, err
+}
+
+func IsSenderOrReceiver(userId int, transactionCode string) bool {
+	var ok bool
+
+	query := `
+		SELECT 1
+		FROM transactions t
+		JOIN wallet_owners wo ON wo.wallet_address IN (t.sender, t.receiver)
+		JOIN users u ON u.id = wo.user_id
+		WHERE u.id = ? AND t.transaction_code = ?;
+	`
+	db.QueryRow(query, userId, transactionCode).Scan(&ok)
+	return ok
 }

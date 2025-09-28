@@ -169,37 +169,62 @@ func TestGetRecentTransactions(t *testing.T) {
 func TestGetTransaction(t *testing.T) {
 	requireLogin(tommy)
 
-	// Fetch one of tommy's wallet
 	tommysWallet, err := createWallet(tommy)
 	if err != nil {
 		t.Fatalf("Error creating wallet; %v\n", err)
 	}
 
-	// Get all transactions made by tommy's wallet
-	transactions, err := getTransactions(testServer.URL, tommysWallet.WalletAddress)
+	leesWallet, err := createWallet(lee)
 	if err != nil {
-		t.Fatalf("Error fetching wallet transactions; %v\n", err)
+		t.Fatalf("Error creating wallet; %v\n", err)
 	}
 
-	// Fetch one transaction
-	transaction := randomChoice(transactions)
-	if transaction == nil {
-		t.Fatalf("At least one transaction required in database for test to complete")
+	resp, err := sendMoney(
+		tommysWallet.WalletAddress,
+		leesWallet.WalletAddress,
+		tommy,
+		1.0,
+	)
+	if err != nil {
+		t.Fatalf("Error transferring funds; %v\n", err)
 	}
 
-	resp, err := http.Get(testServer.URL + fmt.Sprintf("/transactions/%v", transaction.TransactionCode))
+	body := expectStatus(t, resp, http.StatusOK)
+	resp.Body.Close()
+
+	var transaction database.Transaction
+	err = json.Unmarshal(body, &transaction)
+	if err != nil {
+		t.Fatalf("Error unmarshalling response body; %v\n", err)
+	}
+
+	resp, err = http.Get(
+		testServer.URL + fmt.Sprintf("/transactions/%v", transaction.TransactionCode),
+	)
 	if err != nil {
 		t.Fatalf("Error making request; %v\n", err)
 	}
-	defer resp.Body.Close()
 
-	body := expectStatus(t, resp, http.StatusOK)
+	body = expectStatus(t, resp, http.StatusOK)
+	resp.Body.Close()
 
 	var fetchedTransaction database.Transaction
 	err = json.Unmarshal(body, &fetchedTransaction)
 	if err != nil {
 		t.Errorf("Expected transaction but got garbage data")
 	}
+
+	// Try fetching transaction details as third party
+	// Should fail
+	requireLogin(bob)
+
+	resp, err = http.Get(testServer.URL + "/transactions/" + fetchedTransaction.TransactionCode)
+	if err != nil {
+		t.Fatalf("Error making request; %v\n", err)
+	}
+
+	expectStatus(t, resp, http.StatusNotFound)
+	resp.Body.Close()
 }
 
 func TestSendingInvalidAmount(t *testing.T) {

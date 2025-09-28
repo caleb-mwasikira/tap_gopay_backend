@@ -314,7 +314,7 @@ func TestActivateWallet(t *testing.T) {
 func TestGetWalletsOwnedByPhoneNo(t *testing.T) {
 	// Create account for random user
 	user := NewRandomUser()
-	resp, err := createAccount(testServer.URL, user)
+	resp, err := createAccount(user)
 	if err != nil {
 		t.Fatalf("Error creating user account; %v\n", err)
 	}

@@ -55,7 +55,7 @@ func TestSetOrUpdateLimit(t *testing.T) {
 		tommysWallet.WalletAddress,
 		leesWallet.WalletAddress,
 		tommy,
-		limit*1,
+		limit+1,
 	)
 	if err != nil {
 		t.Fatalf("Error transferring funds; %v\n", err)

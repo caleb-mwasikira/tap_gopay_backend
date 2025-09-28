@@ -15,6 +15,6 @@ SELECT
     `t`.`created_at`
 FROM
     `transactions` `t`
-    LEFT JOIN `all_accounts` `s` ON `t`.`sender` = `s`.`wallet_address`
-    LEFT JOIN `all_accounts` `r` ON `t`.`receiver` = `r`.`wallet_address`
+    LEFT JOIN `wallet_details` `s` ON `t`.`sender` = `s`.`wallet_address`
+    LEFT JOIN `wallet_details` `r` ON `t`.`receiver` = `r`.`wallet_address`
     LEFT JOIN `signatures` `sig` ON `sig`.`transaction_code` = `t`.`transaction_code`;

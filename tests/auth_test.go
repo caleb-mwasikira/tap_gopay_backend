@@ -63,7 +63,7 @@ func NewUser(username, email, password string) User {
 	}
 }
 
-func createAccount(serverUrl string, user User) (*http.Response, error) {
+func createAccount(user User) (*http.Response, error) {
 	path := filepath.Join("keys", fmt.Sprintf("%v.key", user.Email))
 
 	privKey, err := generatePrivateKey(path, user.Password)
@@ -90,7 +90,11 @@ func createAccount(serverUrl string, user User) (*http.Response, error) {
 	}
 
 	// Send request
-	resp, err := http.Post(serverUrl+"/auth/register", jsonContentType, bytes.NewBuffer(body))
+	resp, err := http.Post(
+		testServer.URL+"/auth/register",
+		jsonContentType,
+		bytes.NewBuffer(body),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +105,7 @@ func createAccount(serverUrl string, user User) (*http.Response, error) {
 func TestRegister(t *testing.T) {
 	user := NewRandomUser()
 
-	resp, err := createAccount(testServer.URL, user)
+	resp, err := createAccount(user)
 	if err != nil {
 		t.Fatalf("Error making request; %v\n", err)
 	}

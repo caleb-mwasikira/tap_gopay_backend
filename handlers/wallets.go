@@ -135,19 +135,13 @@ func GetWalletsOwnedByPhoneNo(w http.ResponseWriter, r *http.Request) {
 }
 
 func FreezeWallet(w http.ResponseWriter, r *http.Request) {
-	user, ok := getAuthUser(r)
-	if !ok {
-		api.Unauthorized(w, "Access to this route requires user login")
-		return
-	}
-
 	walletAddress := chi.URLParam(r, "wallet_address")
 	if err := validateWalletAddress(walletAddress); err != nil {
 		api.BadRequest(w, err.Error(), nil)
 		return
 	}
 
-	err := database.FreezeWallet(user.Id, walletAddress)
+	err := database.FreezeWallet(walletAddress)
 	if err != nil {
 		api.Errorf(w, "Error freezing wallet account", err)
 		return
@@ -157,19 +151,13 @@ func FreezeWallet(w http.ResponseWriter, r *http.Request) {
 }
 
 func ActivateWallet(w http.ResponseWriter, r *http.Request) {
-	user, ok := getAuthUser(r)
-	if !ok {
-		api.Unauthorized(w, "Access to this route requires user login")
-		return
-	}
-
 	walletAddress := chi.URLParam(r, "wallet_address")
 	if err := validateWalletAddress(walletAddress); err != nil {
 		api.BadRequest(w, err.Error(), nil)
 		return
 	}
 
-	err := database.ActivateWallet(user.Id, walletAddress)
+	err := database.ActivateWallet(walletAddress)
 	if err != nil {
 		api.Errorf(w, "Error activating wallet account", err)
 		return
@@ -255,7 +243,6 @@ func AddWalletOwner(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fetch id of user to add
 	newUser, err := database.GetUserByEmailOrPhoneNo(req.Email, req.PhoneNo)
 	if err != nil {
 		message := fmt.Sprintf("User '%v' or '%v' not found", req.Email, req.PhoneNo)

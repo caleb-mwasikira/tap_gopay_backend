@@ -41,22 +41,21 @@ func SubscribeNotifications(w http.ResponseWriter, r *http.Request) {
 	mutex.Unlock()
 }
 
-// Notifies interested parties of a transaction that has occurred
-func notifyInterestedParties(transaction database.Transaction) {
-	interestedParties, err := database.GetWalletOwners(
+func sendNotification(transaction database.Transaction) {
+	walletOwners, err := database.GetWalletOwners(
 		transaction.Sender.WalletAddress,
 		transaction.Receiver.WalletAddress,
 	)
 	if err != nil {
-		log.Printf("Error fetching interested parties; %v\n", err)
+		log.Printf("Error fetching wallet owners; %v\n", err)
 		return
 	}
 
 	conns := []*websocket.Conn{}
 
 	mutex.RLock()
-	for _, party := range interestedParties {
-		conn, ok := subscribed[party]
+	for _, ownerId := range walletOwners {
+		conn, ok := subscribed[ownerId]
 		if ok {
 			conns = append(conns, conn)
 		}
@@ -66,7 +65,7 @@ func notifyInterestedParties(transaction database.Transaction) {
 	for _, conn := range conns {
 		err := conn.WriteJSON(&transaction)
 		if err != nil {
-			log.Printf("Error notifying interested party of transaction; %v\n", err)
+			log.Printf("Error notifying wallet owners of transaction; %v\n", err)
 		}
 	}
 }

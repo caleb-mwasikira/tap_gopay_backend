@@ -99,7 +99,7 @@ BEGIN
     FROM wallets
     WHERE wallet_address = p_wallet_address;
 
-    -- If exists, check if it’s active
+    -- If exists, check if it's active
     IF wallet_exists = 1 THEN
         SELECT is_active INTO wallet_active
         FROM wallets

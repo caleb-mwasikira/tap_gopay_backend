@@ -22,7 +22,7 @@ type CashPool struct {
 }
 
 func CreateCashPool(
-	creatorUserId int,
+	cashPoolCreator int,
 	poolName string,
 	description string,
 	targetAmount float64,
@@ -31,20 +31,23 @@ func CreateCashPool(
 ) (*CashPool, error) {
 	walletAddress := generateWalletAddress(cashPool)
 
+	tx, err := db.Begin()
+	if err != nil {
+		return nil, err
+	}
+
 	query := `
 		INSERT INTO cash_pools(
-			creator_user_id,
 			pool_name,
 			description,
 			target_amount,
 			wallet_address,
 			receiver,
 			expires_at
-		) VALUES(?, ?, ?, ?, ?, ?, ?)
+		) VALUES(?, ?, ?, ?, ?, ?)
 	`
-	_, err := db.Exec(
+	_, err = tx.Exec(
 		query,
-		creatorUserId,
 		poolName,
 		description,
 		targetAmount,
@@ -55,6 +58,19 @@ func CreateCashPool(
 	if err != nil {
 		return nil, err
 	}
+
+	query = "INSERT INTO wallet_owners(user_id, wallet_address) VALUES(?, ?)"
+	_, err = tx.Exec(query, cashPoolCreator, walletAddress)
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	if err = tx.Commit(); err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
 	return GetCashPool(walletAddress)
 }
 
@@ -102,7 +118,7 @@ func GetCashPool(walletAddress string) (*CashPool, error) {
 func GetExpiredCashPools() ([]string, error) {
 	query := `
 		SELECT wallet_address
-		FROM cash_pools
+		FROM cash_pool_details
 		WHERE collected_amount < target_amount
 		AND expires_at < NOW()
 		AND status <> 'refunded'

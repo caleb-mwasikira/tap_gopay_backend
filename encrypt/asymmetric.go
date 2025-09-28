@@ -17,8 +17,6 @@ var (
 )
 
 func GenerateKeyPair(seedPhrase string) (*ecdsa.PrivateKey, *ecdsa.PublicKey, error) {
-	log.Println("Generating EC key pair...")
-
 	// Generate stronger key from seed phrase using KDF
 	key, err := generateArgon2Key(seedPhrase, nil)
 	if err != nil {

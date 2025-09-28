@@ -28,7 +28,7 @@ SELECT
     ) AS total_sent,
 
     -- Initial deposit
-    wl.initial_deposit AS initial_deposit,
+    COALESCE(wl.initial_deposit, 0.0) AS initial_deposit,
 
     -- Current balance calculation
     (

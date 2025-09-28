@@ -24,11 +24,12 @@ WHERE
 END;
 
 CREATE TRIGGER `verifySignature` BEFORE INSERT ON `signatures`
-FOR EACH ROW BEGIN
+ FOR EACH ROW BEGIN
     DECLARE var_sender VARCHAR(255);
     DECLARE var_transaction_type VARCHAR(255);
+    DECLARE var_transaction_id BIGINT;
 
-    -- Get sender’s wallet address
+    -- Get sender's wallet address
     SELECT sender, transaction_type
     INTO var_sender, var_transaction_type
     FROM transactions

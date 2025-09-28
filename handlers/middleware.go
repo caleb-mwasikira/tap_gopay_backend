@@ -9,6 +9,7 @@ import (
 
 	"github.com/caleb-mwasikira/tap_gopay_backend/api"
 	"github.com/caleb-mwasikira/tap_gopay_backend/database"
+	"github.com/go-chi/chi/v5"
 )
 
 const (
@@ -113,6 +114,25 @@ func RequireAdmin(next http.Handler) http.Handler {
 		// Embed user into context
 		newCtx := context.WithValue(r.Context(), USER_CTX_KEY, &user)
 		next.ServeHTTP(w, r.WithContext(newCtx))
+	})
+}
+
+func VerifyWalletOwnership(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user, ok := getAuthUser(r)
+		if !ok {
+			api.Unauthorized(w, "Access to this resource requires user login")
+			return
+		}
+
+		walletAddress := chi.URLParam(r, "wallet_address")
+
+		if !database.OwnsWallet(user.Id, walletAddress) {
+			api.Unauthorized(w, "This wallet does not belong to you")
+			return
+		}
+
+		next.ServeHTTP(w, r)
 	})
 }
 

@@ -61,15 +61,13 @@ ADD CONSTRAINT `fk_request_funds_sender` FOREIGN KEY (`sender`) REFERENCES `wall
 -- Indexes for table `wallet_owners`
 --
 ALTER TABLE `wallet_owners` ADD PRIMARY KEY (`id`),
-ADD KEY `wallet_owners_user_id_fk` (`user_id`),
-ADD KEY `wallet_owners_wallet_address_fk` (`wallet_address`);
+ADD KEY `fk_wallet_owners_user_id` (`user_id`);
 
 ALTER TABLE `wallets` ADD CONSTRAINT `wallets_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`);
 
 ALTER TABLE `wallet_owners` MODIFY `id` bigint NOT NULL AUTO_INCREMENT;
 
-ALTER TABLE `wallet_owners` ADD CONSTRAINT `wallet_owners_user_id_fk` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-ADD CONSTRAINT `wallet_owners_wallet_address_fk` FOREIGN KEY (`wallet_address`) REFERENCES `wallets` (`wallet_address`) ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `wallet_owners` ADD CONSTRAINT `fk_wallet_owners_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Indexes for table `signatures`

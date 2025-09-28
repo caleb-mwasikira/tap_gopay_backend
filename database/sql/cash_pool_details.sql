@@ -6,19 +6,21 @@ OR REPLACE VIEW cash_pool_details AS
 SELECT
     `uc`.`username` AS `creators_username`,
     `uc`.`email` AS `creators_email`,
+    `ur`.`username` AS `receivers_username`,
+    `ur`.`email` AS `receivers_email`,
     `p`.`pool_name` AS `pool_name`,
     `p`.`description`,
     `p`.`wallet_address`,
     `p`.`target_amount`,
-    `ur`.`username` AS `receivers_username`,
-    `ur`.`email` AS `receivers_email`,
+    `b`.`total_received` AS `collected_amount`,
     `p`.`receiver` AS `receivers_wallet_address`,
     `p`.`expires_at`,
     `p`.`status`,
-    `p`.`collected_amount`,
     `p`.`created_at`
 FROM
     `cash_pools` AS `p`
-    JOIN `users` `uc` ON `uc`.`id` = `p`.`creator_user_id`
-    JOIN `wallet_owners` `wo` ON `wo`.`wallet_address` = `p`.`receiver`
-    JOIN `users` `ur` ON `ur`.`id` = `wo`.`user_id`;
+    LEFT JOIN `wallet_owners` `wo` ON `wo`.`wallet_address` = `p`.`wallet_address`
+    LEFT JOIN `users` `uc` ON `uc`.`id` = `wo`.`user_id`
+    LEFT JOIN `balances` `b` ON `b`.`wallet_address` = `p`.`wallet_address`
+    LEFT JOIN `wallet_owners` `rwo` ON `rwo`.`wallet_address` = `p`.`receiver`
+    LEFT JOIN `users` `ur` ON `ur`.`id` = `rwo`.`user_id`;

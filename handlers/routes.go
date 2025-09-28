@@ -38,13 +38,18 @@ func GetRoutes() *chi.Mux {
 			// Wallets
 			r.Post("/new-wallet", CreateWallet)
 			r.Get("/wallets", GetAllWallets)
-			r.Get("/wallets/{wallet_address}", GetWallet)
 			r.Post("/wallets/owned-by-phone", GetWalletsOwnedByPhoneNo)
-			r.Post("/wallets/{wallet_address}/freeze", FreezeWallet)
-			r.Post("/wallets/{wallet_address}/activate", ActivateWallet)
-			r.Post("/wallets/{wallet_address}/limit", SetOrUpdateLimit)
-			r.Post("/wallets/{wallet_address}/add-owner", AddWalletOwner)
-			r.Post("/wallets/{wallet_address}/remove-owner", RemoveWalletOwner)
+
+			r.Group(func(r chi.Router) {
+				r.Use(VerifyWalletOwnership)
+
+				r.Get("/wallets/{wallet_address}", GetWallet)
+				r.Post("/wallets/{wallet_address}/freeze", FreezeWallet)
+				r.Post("/wallets/{wallet_address}/activate", ActivateWallet)
+				r.Post("/wallets/{wallet_address}/limit", SetOrUpdateLimit)
+				r.Post("/wallets/{wallet_address}/add-owner", AddWalletOwner)
+				r.Post("/wallets/{wallet_address}/remove-owner", RemoveWalletOwner)
+			})
 
 			// Transactions
 			r.Post("/send-money", SendMoney)
