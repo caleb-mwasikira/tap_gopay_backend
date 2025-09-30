@@ -221,7 +221,7 @@ FOR EACH ROW BEGIN
         WHERE wallet_address = NEW.receiver;
 
         -- Check if target reached
-        IF var_collected_amount >= var_target_amount THEN
+        IF (var_collected_amount + NEW.amount) >= var_target_amount THEN
             UPDATE cash_pools
             SET status = 'funded'
             WHERE wallet_address = NEW.receiver;

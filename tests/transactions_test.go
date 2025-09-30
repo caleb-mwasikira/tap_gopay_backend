@@ -67,7 +67,7 @@ func sendMoney(
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	}
 
-	log.Printf("Sending KSH %.2f funds from '%v' to '%v'\n", amount, sender, receiver)
+	log.Printf("Sending KSH %.2f from '%v' to '%v'\n", amount, sender, receiver)
 
 	// Sign transaction details
 	signature, pubKeyHash, err := signPayload(loginUser.Email, req.Hash())

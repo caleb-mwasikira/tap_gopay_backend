@@ -3,6 +3,7 @@ package tests
 import (
 	"bytes"
 	"encoding/json"
+	"log"
 	"math/rand/v2"
 	"net/http"
 	"testing"
@@ -288,6 +289,33 @@ func TestCashPoolWithdrawal(t *testing.T) {
 	resp.Body.Close()
 }
 
+func checkRefunds(t *testing.T, deposits []cashPoolDeposit, duration time.Duration) {
+	maxDuration := duration + (5 * time.Second)
+
+	select {
+	case <-time.After(maxDuration):
+		t.Fatalf("Tired of waiting")
+
+	case <-time.After(duration):
+		// All users who sent funds to the cash pool
+		// should be refunded.
+		for _, deposit := range deposits {
+			expectedBalance := deposit.original
+
+			wallet, err := getWallet(deposit.user, deposit.walletAddress)
+			if err != nil {
+				t.Errorf("Error fetching wallet; %v\n", err)
+			}
+
+			if wallet.Balance != expectedBalance {
+				t.Errorf("%v Wallet '%v' was never refunded KSH %v deposited into expired cash pool %v\n", COLOR_RED, wallet.WalletAddress, deposit.amountSent, COLOR_RESET)
+			} else {
+				log.Printf("%v Wallet '%v' refunded KSH %v deposited into expired cash pool %v\n", COLOR_GREEN, wallet.WalletAddress, deposit.amountSent, COLOR_RESET)
+			}
+		}
+	}
+}
+
 func TestCashPoolRefund(t *testing.T) {
 	tommysWallet, err := createWallet(tommy)
 	if err != nil {
@@ -307,32 +335,56 @@ func TestCashPoolRefund(t *testing.T) {
 	}
 
 	// Fund cash pool halfway, then wait for it to expire.
-	_, cashPoolDeposits, err := fundCashPool(cashPool, targetAmount/2)
+	_, deposits, err := fundCashPool(cashPool, targetAmount/2)
 	if err != nil {
 		t.Fatalf("Error funding cash pool; %v\n", err)
 	}
 
-	// Wait for cash pool to expire.
-	select {
-	case <-time.After(25 * time.Second):
-		t.Fatalf("Tired of waiting")
+	checkRefunds(t, deposits, 15*time.Second)
+}
 
-	case <-time.After(20 * time.Second):
-		// All users who sent funds to the cash pool
-		// should be refunded.
-		for _, deposit := range cashPoolDeposits {
-			expectedBalance := deposit.original
+func TestRemoveCashPool(t *testing.T) {
+	// Create cash pool, delete it and check if users who
+	// deposited into the cash pool are refunded
 
-			wallet, err := getWallet(deposit.user, deposit.walletAddress)
-			if err != nil {
-				t.Errorf("Error fetching wallet; %v\n", err)
-				return
-			}
-
-			if wallet.Balance != expectedBalance {
-				t.Errorf("%v Wallet '%v' was never refunded KSH %v deposited into expired cash pool %v\n", COLOR_RED, wallet.WalletAddress, deposit.amountSent, COLOR_RESET)
-			}
-		}
+	leesWallet, err := createWallet(lee)
+	if err != nil {
+		t.Fatalf("Error creating wallet; %v\n", err)
 	}
 
+	cashPool, err := createCashPool(
+		tommy,
+		leesWallet,
+		150,
+		time.Now().Add(24*time.Hour),
+	)
+	if err != nil {
+		t.Fatalf("Error creating cash pool; %v\n", err)
+	}
+
+	_, deposits, err := fundCashPool(cashPool, 100)
+	if err != nil {
+		t.Fatalf("Error funding cash pool; %v\n", err)
+	}
+
+	requireLogin(tommy)
+
+	req, err := http.NewRequest(
+		http.MethodDelete,
+		testServer.URL+"/cash-pools/"+cashPool.WalletAddress,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Error creating request; %v\n", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Error removing cash pool; %v\n", err)
+	}
+	defer resp.Body.Close()
+
+	expectStatus(t, resp, http.StatusOK)
+
+	checkRefunds(t, deposits, 15*time.Second)
 }

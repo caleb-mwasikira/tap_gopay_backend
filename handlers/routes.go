@@ -62,6 +62,8 @@ func GetRoutes() *chi.Mux {
 			r.Post("/new-cash-pool", CreateCashPool)
 			r.Get("/cash-pools/{wallet_address}", GetCashPool)
 
+			r.With(VerifyWalletOwnership).Delete("/cash-pools/{wallet_address}", RemoveCashPool)
+
 			go RefundExpiredCashPools()
 		})
 	})

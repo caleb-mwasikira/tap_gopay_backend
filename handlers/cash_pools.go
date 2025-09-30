@@ -89,11 +89,32 @@ func RefundExpiredCashPools() {
 
 		for _, cashPool := range expiredCashPools {
 			go func(pool string) {
-				err := database.RefundExpiredCashPool(pool)
+				failedRefunds, err := database.RefundExpiredCashPool(pool)
 				if err != nil {
 					log.Printf("Error refunding cash pool; %v\n", err)
 				}
+
+				log.Printf("%v failed refunds\n", len(failedRefunds))
+				log.Println(failedRefunds)
 			}(cashPool)
 		}
 	}
+}
+
+func RemoveCashPool(w http.ResponseWriter, r *http.Request) {
+	walletAddress := chi.URLParam(r, "wallet_address")
+
+	err := validateWalletAddress(walletAddress)
+	if err != nil {
+		api.BadRequest(w, err.Error(), nil)
+		return
+	}
+
+	err = database.RemoveCashPool(walletAddress)
+	if err != nil {
+		api.Errorf(w, "Error removing cash pool", err)
+		return
+	}
+
+	api.OK(w, "Cash pool expired successfully. Waiting to refund deposits before deletion")
 }

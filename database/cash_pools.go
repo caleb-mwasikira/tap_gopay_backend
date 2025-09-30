@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 )
 
@@ -120,8 +121,7 @@ func GetExpiredCashPools() ([]string, error) {
 		SELECT wallet_address
 		FROM cash_pool_details
 		WHERE collected_amount < target_amount
-		AND expires_at < NOW()
-		AND status <> 'refunded'
+		AND expires_at < NOW() AND status <> 'refunded'
 	`
 	rows, err := db.Query(query)
 	if err != nil {
@@ -141,31 +141,41 @@ func GetExpiredCashPools() ([]string, error) {
 	return cashPools, nil
 }
 
-type refundRequest struct {
+type transaction struct {
 	transactionCode string
 	sender          string
 	receiver        string
 	amount          float64
 }
 
-func handleRefundRequest(request refundRequest) {
+type failedRefund struct {
+	transaction
+	err error
+}
+
+func refundTransaction(wg *sync.WaitGroup, t transaction, failedRefundsChan chan<- failedRefund) {
+	defer wg.Done()
+
 	// 🎵 Raindrops keep falling on my head,
 	// but just like the guy whose feet are too big for his bed,
 	// nothing seems to fit...
 	// Those raindrops keep falling on my head,
 	// they keep falling...
 
-	sysUserId, err := getSystemUserId()
+	systemUserId, err := getSystemUserId()
 	if err != nil {
-		log.Printf("Error fetching system user; %v\n", err)
+		failedRefundsChan <- failedRefund{
+			transaction: t,
+			err:         err,
+		}
 		return
 	}
 
 	var (
-		refundTransactionCode string  = request.transactionCode
-		sender                string  = request.sender
-		receiver              string  = request.receiver
-		amount                float64 = request.amount
+		refundTransactionCode string  = t.transactionCode
+		sender                string  = t.receiver // Flip sender and receiver to reverse funds
+		receiver              string  = t.sender
+		amount                float64 = t.amount
 		fee                   float64 = 0.0
 		timestamp             string  = time.Now().Format(time.RFC3339)
 	)
@@ -175,27 +185,35 @@ func handleRefundRequest(request refundRequest) {
 	payloadHash := sha256.Sum256([]byte(payload))
 	hmacSignature, secretKeyHash, err := signPayload(payloadHash[:])
 	if err != nil {
-		log.Printf("Error signing refund transaction; %v\n", err)
+		failedRefundsChan <- failedRefund{
+			transaction: t,
+			err:         err,
+		}
 		return
 	}
 
 	_, err = CreateRefundTransaction(
-		*sysUserId,
+		*systemUserId,
 		refundTransactionCode,
 		sender,
 		receiver,
-		request.amount,
+		t.amount,
 		fee,
 		timestamp,
 		base64.StdEncoding.EncodeToString(hmacSignature),
 		base64.StdEncoding.EncodeToString(secretKeyHash),
 	)
 	if err != nil {
-		log.Printf("Error creating refund transaction; %v\n", err)
+		failedRefundsChan <- failedRefund{
+			transaction: t,
+			err:         err,
+		}
 	}
 }
 
-func RefundExpiredCashPool(cashPoolAddress string) error {
+func RefundExpiredCashPool(cashPoolAddress string) ([]failedRefund, error) {
+	log.Println("Refunding cash pool; ", cashPoolAddress)
+
 	query := `
 		SELECT
 			transaction_code,
@@ -207,26 +225,49 @@ func RefundExpiredCashPool(cashPoolAddress string) error {
 	`
 	rows, err := db.Query(query, cashPoolAddress)
 	if err != nil {
-		return err
+		return nil, err
 	}
+
+	wg := sync.WaitGroup{}
+	failedRefundsChan := make(chan failedRefund, 10)
 
 	for rows.Next() {
-		var refund refundRequest
+		var t transaction
 
 		err = rows.Scan(
-			&refund.transactionCode,
-			&refund.receiver, // Flip sender and receiver to reverse funds
-			&refund.sender,
-			&refund.amount,
+			&t.transactionCode,
+			&t.sender,
+			&t.receiver,
+			&t.amount,
 		)
 		if err != nil {
-			return err
+			log.Printf("Error scanning database row; %v\n", err)
+			break
 		}
 
-		handleRefundRequest(refund)
+		wg.Add(1)
+		go refundTransaction(&wg, t, failedRefundsChan)
 	}
 
-	query = "UPDATE cash_pools SET status= 'refunded' WHERE wallet_address= ?"
-	_, err = db.Exec(query, cashPoolAddress)
+	wg.Wait()
+	close(failedRefundsChan)
+
+	// Collect failed refunds
+	failedRefunds := []failedRefund{}
+
+	for failedRefund := range failedRefundsChan {
+		failedRefunds = append(failedRefunds, failedRefund)
+	}
+
+	if len(failedRefunds) == 0 {
+		query = "UPDATE cash_pools SET status= 'refunded' WHERE wallet_address= ?"
+		_, err = db.Exec(query, cashPoolAddress)
+	}
+	return failedRefunds, err
+}
+
+func RemoveCashPool(cashPoolAddress string) error {
+	query := "UPDATE cash_pools SET expires_at= NOW() WHERE wallet_address= ?"
+	_, err := db.Exec(query, cashPoolAddress)
 	return err
 }
