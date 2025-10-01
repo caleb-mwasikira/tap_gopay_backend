@@ -6,16 +6,20 @@ OR REPLACE VIEW cash_pool_details AS
 SELECT
     `uc`.`username` AS `creators_username`,
     `uc`.`email` AS `creators_email`,
-    `ur`.`username` AS `receivers_username`,
-    `ur`.`email` AS `receivers_email`,
-    `p`.`pool_name` AS `pool_name`,
+    `p`.`pool_name`,
+    `p`.`pool_type`,
     `p`.`description`,
     `p`.`wallet_address`,
     `p`.`target_amount`,
     `b`.`total_received` AS `collected_amount`,
-    `p`.`receiver` AS `receivers_wallet_address`,
     `p`.`expires_at`,
     `p`.`status`,
+    -- Some cash pools eg. chama DO NOT have a predefined receiver.
+    -- So receivers_* values could be NULL.
+    -- COALESCE values into empty string
+    COALESCE(`ur`.`username`, '') AS `receivers_username`,
+    COALESCE(`ur`.`email`, '') AS `receivers_email`,
+    COALESCE(`p`.`receiver`, '') AS `receivers_wallet_address`,
     `p`.`created_at`
 FROM
     `cash_pools` AS `p`

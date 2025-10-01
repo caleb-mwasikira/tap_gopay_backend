@@ -15,11 +15,10 @@ type CashPoolRequest struct {
 	Name         string  `json:"name" validate:"min=4"`
 	Description  string  `json:"description"`
 	TargetAmount float64 `json:"target_amount" validate:"min=100"`
-	Receiver     string  `json:"receiver" validate:"wallet_address"`
-	ExpiresAt    string  `json:"expires_at" validate:"expiry"`
+	ExpiresAt    string  `json:"expires_at" validate:"expires_at"`
 }
 
-func CreateCashPool(w http.ResponseWriter, r *http.Request) {
+func CreateNewChama(w http.ResponseWriter, r *http.Request) {
 	user, ok := getAuthUser(r)
 	if !ok {
 		api.Unauthorized(w, "Access to this route requires user login")
@@ -38,12 +37,18 @@ func CreateCashPool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if isEmpty(req.ExpiresAt) {
+		defaultChamaExpiryDate := time.Now().Add(5 * 365 * 24 * time.Hour)
+		req.ExpiresAt = defaultChamaExpiryDate.Format(time.RFC3339)
+	}
+
 	cashPool, err := database.CreateCashPool(
 		user.Id,
 		req.Name,
+		database.Chama,
 		req.Description,
 		req.TargetAmount,
-		req.Receiver,
+		"", // A chama does not have a predefined receiver of funds
 		req.ExpiresAt,
 	)
 	if err != nil {

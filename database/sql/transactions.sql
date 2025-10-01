@@ -141,7 +141,7 @@ END
 
 
 CREATE TRIGGER `verifyCashPoolTransactions` BEFORE INSERT ON `transactions`
-FOR EACH ROW BEGIN
+ FOR EACH ROW BEGIN
 	DECLARE is_withdrawing_from_cash_pool BOOLEAN;
     DECLARE is_depositing_into_cash_pool BOOLEAN;
     DECLARE var_target_amount DECIMAL(10,2);
@@ -149,18 +149,19 @@ FOR EACH ROW BEGIN
     DECLARE var_cash_pool_status TEXT;
     DECLARE var_cash_pool_balance DECIMAL(10,2);
     DECLARE var_cash_pool_receiver VARCHAR(255);
+    DECLARE var_cash_pool_type VARCHAR(255);
 
     SET is_withdrawing_from_cash_pool = (NEW.sender LIKE '33%');
     SET is_depositing_into_cash_pool = (NEW.receiver LIKE '33%');
 
     IF is_withdrawing_from_cash_pool THEN
-        SELECT target_amount, receivers_wallet_address, collected_amount
-        INTO var_target_amount, var_cash_pool_receiver, var_collected_amount
+        SELECT target_amount, receivers_wallet_address, collected_amount, pool_type
+        INTO var_target_amount, var_cash_pool_receiver, var_collected_amount, var_cash_pool_type
         FROM cash_pool_details WHERE wallet_address = NEW.sender;
 
         IF NEW.transaction_type= 'transfer' THEN
-            -- Check that funds are being sent to correct receiver
-            IF var_cash_pool_receiver != NEW.receiver THEN
+            -- Check that funds are being sent to correct receiver.
+            IF var_cash_pool_type <> 'chama' AND NEW.receiver != var_cash_pool_receiver THEN
                 SIGNAL SQLSTATE '45000'
                 SET MESSAGE_TEXT="Receiver specified does not match the expected recipient for this payment";
             END IF;
@@ -199,7 +200,6 @@ FOR EACH ROW BEGIN
             SIGNAL SQLSTATE '45000'
             SET MESSAGE_TEXT="Cash pool has already reached its funding goal";
         END IF;
-
     END IF;
 
 END

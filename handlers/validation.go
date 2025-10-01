@@ -81,16 +81,18 @@ func validateStruct(obj any) error {
 			}
 			if rule == "account" {
 				str, _ := fieldValue.(string)
+				if err := validateAccount(field.Name, str); err != nil {
+					return err
+				}
+			}
+			if rule == "accounts" {
+				values, _ := fieldValue.([]string)
 
-				// Check if value is either a wallet address or phone number
-				err := validateWalletAddress(str)
-				isWalletNumber := err == nil
-
-				err2 := validatePhoneNumber(str)
-				isPhoneNumber := err2 == nil
-
-				if !isWalletNumber && !isPhoneNumber {
-					return fmt.Errorf("%v must either be a wallet address or phone number", field.Name)
+				for _, value := range values {
+					err := validateAccount(field.Name, value)
+					if err != nil {
+						return err
+					}
 				}
 			}
 			if rule == "amount" {
@@ -123,20 +125,24 @@ func validateStruct(obj any) error {
 					return err
 				}
 			}
-			if rule == "expiry" {
+			if rule == "expires_at" {
 				str, ok := fieldValue.(string)
 				if !ok {
 					return fmt.Errorf("invalid expiry format; expected RFC3339 string")
 				}
 
-				expiresAt, err := time.Parse(time.RFC3339, str)
-				if err != nil {
-					return fmt.Errorf("invalid expiry format; expected RFC3339 string")
+				// Optional field; we only validate if value is provided
+				if !isEmpty(str) {
+					expiresAt, err := time.Parse(time.RFC3339, str)
+					if err != nil {
+						return fmt.Errorf("invalid expiry format; expected RFC3339 string")
+					}
+
+					if expiresAt.Before(time.Now()) {
+						return fmt.Errorf("invalid expiry time; expiry time already passed")
+					}
 				}
 
-				if expiresAt.Before(time.Now()) {
-					return fmt.Errorf("invalid expiry time; expiry time already passed")
-				}
 			}
 		}
 	}
@@ -167,6 +173,17 @@ func lessThan(v interface{}, limit int) bool {
 
 func isEmpty(value string) bool {
 	return strings.TrimSpace(value) == ""
+}
+
+func validateAccount(fieldName string, value string) error {
+	// Check if value is either a wallet address or phone number
+	isWalletNumber := validateWalletAddress(value) == nil
+	isPhoneNumber := validatePhoneNumber(value) == nil
+
+	if !isWalletNumber && !isPhoneNumber {
+		return fmt.Errorf("%v must either be a wallet address or phone number", fieldName)
+	}
+	return nil
 }
 
 func validateEmail(email string) error {

@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/brianvoe/gofakeit"
@@ -34,15 +33,17 @@ type User struct {
 }
 
 func randomPhoneNo() string {
-	str := strings.Builder{}
-	str.WriteString("07") // Kenyan phone number
+	// pick a prefix.
+	// KE phone number prefixes range from 701-799
+	prefix := fmt.Sprintf("%d", 701+rand.IntN(799-701))
 
-	const phoneNoLength int = 8
-	for range phoneNoLength {
-		num := rand.IntN(10)
-		str.WriteString(fmt.Sprintf("%d", num))
+	// generate remaining 6 random digits
+	number := ""
+	for i := 0; i < 6; i++ {
+		number += fmt.Sprintf("%d", rand.IntN(10))
 	}
-	return str.String()
+
+	return "+254" + prefix + number
 }
 
 func NewRandomUser() User {

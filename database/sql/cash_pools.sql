@@ -5,6 +5,7 @@ CREATE TABLE
   `cash_pools` (
     `id` bigint NOT NULL,
     `pool_name` varchar(255) NOT NULL,
+    `pool_type` ENUM('split_bill','chama','business_investment') NOT NULL,
     `description` text,
     `target_amount` decimal(10, 2) NOT NULL,
     `wallet_address` varchar(255) NOT NULL,
@@ -41,11 +42,6 @@ SET
 END IF;
 
 END
---
--- Indexes for table `cash_pools`
---
-ALTER TABLE `cash_pools` ADD PRIMARY KEY (`id`),
-ADD KEY `fk_cash_pools_receiver` (`receiver`);
 
 --
 -- AUTO_INCREMENT for table `cash_pools`
@@ -55,9 +51,4 @@ ALTER TABLE `cash_pools` MODIFY `id` bigint NOT NULL AUTO_INCREMENT;
 --
 -- Constraints for table `cash_pools`
 --
-ALTER TABLE `cash_pools`,
-ADD CONSTRAINT `fk_cash_pools_receiver` FOREIGN KEY (`receiver`) REFERENCES `wallets` (`wallet_address`) ON DELETE RESTRICT ON UPDATE RESTRICT;
-
 ALTER TABLE `cash_pools` ADD UNIQUE (`wallet_address`);
-
-ALTER TABLE `transactions` ADD CONSTRAINT `fk_transactions_cash_pool_receiver` FOREIGN KEY (`receiver`) REFERENCES `cash_pools` (`wallet_address`) ON DELETE RESTRICT ON UPDATE RESTRICT;

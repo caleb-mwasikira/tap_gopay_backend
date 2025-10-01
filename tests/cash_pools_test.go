@@ -14,18 +14,23 @@ import (
 	"github.com/caleb-mwasikira/tap_gopay_backend/utils"
 )
 
-func createCashPool(
+func createNewChama(
 	creator User,
-	receiver *database.Wallet,
+	name string,
+	description string,
 	targetAmount float64,
-	expiresAt time.Time,
+	expiresAt *time.Time,
 ) (*database.CashPool, error) {
+	var expiresAtStr string
+	if expiresAt != nil {
+		expiresAtStr = expiresAt.Format(time.RFC3339)
+	}
+
 	req := handlers.CashPoolRequest{
-		Name:         "Fundraising",
-		Description:  "Raising money for school fees",
+		Name:         name,
+		Description:  description,
 		TargetAmount: targetAmount,
-		Receiver:     receiver.WalletAddress,
-		ExpiresAt:    expiresAt.Format(time.RFC3339),
+		ExpiresAt:    expiresAtStr,
 	}
 	body, err := json.Marshal(&req)
 	if err != nil {
@@ -35,7 +40,7 @@ func createCashPool(
 	requireLogin(creator)
 
 	resp, err := http.Post(
-		testServer.URL+"/new-cash-pool",
+		testServer.URL+"/new-chama",
 		jsonContentType,
 		bytes.NewBuffer(body),
 	)
@@ -82,11 +87,11 @@ func fundCashPool(cashPool *database.CashPool, targetAmount float64) (float64, [
 
 	for depositedAmount < targetAmount {
 		if numTries >= 3 {
+			log.Println("Failed multiple times to fund cash pool")
 			break
 		}
 
-		amount := utils.RoundFloat(targetAmount*rand.Float64(), 2)
-
+		amount := utils.RoundFloat(handlers.INITIAL_DEPOSIT*rand.Float64(), 2)
 		user := randomChoice(users)
 
 		wallet, err := createWallet(*user)
@@ -123,17 +128,13 @@ func fundCashPool(cashPool *database.CashPool, targetAmount float64) (float64, [
 	return depositedAmount, deposits, nil
 }
 
-func TestCreateCashPool(t *testing.T) {
-	tommysWallet, err := createWallet(tommy)
-	if err != nil {
-		t.Fatalf("Error creating wallet; %v\n", err)
-	}
-
-	cashPool, err := createCashPool(
+func TestCreateNewChama(t *testing.T) {
+	cashPool, err := createNewChama(
 		tommy,
-		tommysWallet,
+		"Fundraising",
+		"Raising money for fun and profit",
 		150,
-		time.Now().Add(1*time.Minute),
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("Error creating cash pool; %v\n", err)
@@ -170,6 +171,11 @@ func TestCreateCashPool(t *testing.T) {
 	if fetchedCashPool.CollectedAmount < cashPool.TargetAmount {
 		t.Fatalf("Expected cash pool to have achieved its target amount")
 	}
+
+	expectedPoolType := database.Chama
+	if fetchedCashPool.PoolType != expectedPoolType {
+		t.Fatalf("Expected '%v' cash pool type but got '%v'\n", expectedPoolType, fetchedCashPool.PoolType)
+	}
 }
 
 func TestCashPoolDeposit(t *testing.T) {
@@ -178,11 +184,12 @@ func TestCashPoolDeposit(t *testing.T) {
 		t.Fatalf("Error creating wallet; %v\n", err)
 	}
 
-	cashPool, err := createCashPool(
+	cashPool, err := createNewChama(
 		tommy,
-		tommysWallet,
+		"Fundraising",
+		"Raising money for fun and profit",
 		150,
-		time.Now().Add(1*time.Minute),
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("Error creating cash pool; %v\n", err)
@@ -218,17 +225,13 @@ func TestCashPoolDeposit(t *testing.T) {
 	resp.Body.Close()
 }
 
-func TestCashPoolWithdrawal(t *testing.T) {
-	tommysWallet, err := createWallet(tommy)
-	if err != nil {
-		t.Fatalf("Error creating wallet; %v\n", err)
-	}
-
-	cashPool, err := createCashPool(
+func TestChamaWithdrawal(t *testing.T) {
+	cashPool, err := createNewChama(
 		tommy,
-		tommysWallet,
+		"Fundraising",
+		"Raising money for fun and profit",
 		150,
-		time.Now().Add(1*time.Minute),
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("Error creating cash pool; %v\n", err)
@@ -259,25 +262,15 @@ func TestCashPoolWithdrawal(t *testing.T) {
 	expectStatus(t, resp, http.StatusInternalServerError)
 	resp.Body.Close()
 
-	// Test sending of funds from cash pool to wrong receiver
-	resp, err = sendMoney(
-		cashPool.WalletAddress,
-		leesWallet.WalletAddress,
-		tommy,
-		cashPool.TargetAmount,
-	)
-	if err != nil {
-		t.Fatalf("Error transferring funds; %v\n", err)
-	}
-
-	expectStatus(t, resp, http.StatusInternalServerError)
-	resp.Body.Close()
+	// For other cash pools apart from chama,
+	// we will have to test if sending to the wrong receiver
+	// fails
 
 	// Test withdrawing more funds than collected amount.
 	// Should return an error
 	resp, err = sendMoney(
 		cashPool.WalletAddress,
-		cashPool.Receiver.WalletAddress,
+		leesWallet.WalletAddress,
 		tommy,
 		collectedAmount+1,
 	)
@@ -316,19 +309,19 @@ func checkRefunds(t *testing.T, deposits []cashPoolDeposit, duration time.Durati
 	}
 }
 
-func TestCashPoolRefund(t *testing.T) {
-	tommysWallet, err := createWallet(tommy)
-	if err != nil {
-		t.Fatalf("Error creating wallet; %v\n", err)
-	}
-
+func TestChamaRefund(t *testing.T) {
 	var targetAmount float64 = 150
 
-	cashPool, err := createCashPool(
+	// Create chama with expiry time to check if funds
+	// are refunded to users after chama expires
+	expiresAt := time.Now().Add(5 * time.Second)
+
+	cashPool, err := createNewChama(
 		tommy,
-		tommysWallet,
-		targetAmount,
-		time.Now().Add(5*time.Second),
+		"Fundraising",
+		"Raising money for fun and profit",
+		150,
+		&expiresAt,
 	)
 	if err != nil {
 		t.Fatalf("Error creating cash pool; %v\n", err)
@@ -347,16 +340,12 @@ func TestRemoveCashPool(t *testing.T) {
 	// Create cash pool, delete it and check if users who
 	// deposited into the cash pool are refunded
 
-	leesWallet, err := createWallet(lee)
-	if err != nil {
-		t.Fatalf("Error creating wallet; %v\n", err)
-	}
-
-	cashPool, err := createCashPool(
+	cashPool, err := createNewChama(
 		tommy,
-		leesWallet,
+		"Fundraising",
+		"Raising money for fun and profit",
 		150,
-		time.Now().Add(24*time.Hour),
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("Error creating cash pool; %v\n", err)

@@ -59,9 +59,8 @@ func GetRoutes() *chi.Mux {
 			r.Post("/transactions/{transaction_code}/sign-transaction", SignTransaction)
 
 			// Cash Pools
-			r.Post("/new-cash-pool", CreateCashPool)
+			r.Post("/new-chama", CreateNewChama)
 			r.Get("/cash-pools/{wallet_address}", GetCashPool)
-
 			r.With(VerifyWalletOwnership).Delete("/cash-pools/{wallet_address}", RemoveCashPool)
 
 			go RefundExpiredCashPools()

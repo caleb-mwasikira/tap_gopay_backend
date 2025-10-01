@@ -9,22 +9,32 @@ import (
 	"time"
 )
 
+type CashPoolType string
+
+const (
+	SplitBill          CashPoolType = "split_bill"
+	Chama              CashPoolType = "chama"
+	BusinessInvestment CashPoolType = "business_investment"
+)
+
 type CashPool struct {
-	Creator         WalletOwner `json:"creator"`
-	PoolName        string      `json:"pool_name"`
-	Description     string      `json:"description"`
-	WalletAddress   string      `json:"wallet_address"`
-	TargetAmount    float64     `json:"target_amount"`
-	Receiver        WalletOwner `json:"receiver"`
-	ExpiresAt       string      `json:"expires_at"`
-	Status          string      `json:"status"`
-	CollectedAmount float64     `json:"collected_amount"`
-	CreatedAt       time.Time   `json:"created_at"`
+	Creator         WalletOwner  `json:"creator"`
+	PoolName        string       `json:"pool_name"`
+	PoolType        CashPoolType `json:"cash_pool_type"`
+	Description     string       `json:"description"`
+	WalletAddress   string       `json:"wallet_address"`
+	TargetAmount    float64      `json:"target_amount"`
+	Receiver        WalletOwner  `json:"receiver"`
+	ExpiresAt       string       `json:"expires_at"`
+	Status          string       `json:"status"`
+	CollectedAmount float64      `json:"collected_amount"`
+	CreatedAt       time.Time    `json:"created_at"`
 }
 
 func CreateCashPool(
 	cashPoolCreator int,
 	poolName string,
+	poolType CashPoolType,
 	description string,
 	targetAmount float64,
 	receiver string,
@@ -40,16 +50,18 @@ func CreateCashPool(
 	query := `
 		INSERT INTO cash_pools(
 			pool_name,
+			pool_type,
 			description,
 			target_amount,
 			wallet_address,
 			receiver,
 			expires_at
-		) VALUES(?, ?, ?, ?, ?, ?)
+		) VALUES(?, ?, ?, ?, ?, ?, ?)
 	`
 	_, err = tx.Exec(
 		query,
 		poolName,
+		poolType,
 		description,
 		targetAmount,
 		walletAddress,
@@ -83,6 +95,7 @@ func GetCashPool(walletAddress string) (*CashPool, error) {
 			creators_username,
 			creators_email,
 			pool_name,
+			pool_type,
 			description,
 			wallet_address,
 			target_amount,
@@ -100,6 +113,7 @@ func GetCashPool(walletAddress string) (*CashPool, error) {
 		&p.Creator.Username,
 		&p.Creator.Email,
 		&p.PoolName,
+		&p.PoolType,
 		&p.Description,
 		&p.WalletAddress,
 		&p.TargetAmount,
