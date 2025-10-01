@@ -93,16 +93,21 @@ func randomString(length uint) string {
 	return sb.String()
 }
 
-func TestMain(m *testing.M) {
-	// Setup code here (runs once before tests)
-	err := os.RemoveAll("keys")
+func formatDir(dirname string, perm os.FileMode) error {
+	err := os.RemoveAll(dirname)
 	if err != nil {
-		log.Fatalf("Error deleting keys directory; %v\n", err)
+		return err
 	}
 
-	err = os.Mkdir("keys", 0700)
+	err = os.Mkdir(dirname, perm)
+	return err
+}
+
+func TestMain(m *testing.M) {
+	// Setup code here (runs once before tests)
+	err := formatDir("keys", 0700)
 	if err != nil {
-		log.Fatalf("Error creating keys directory; %v\n", err)
+		log.Fatalf("Error formatting 'keys' dir; %v\n", err)
 	}
 
 	tablesToSkip := []string{"transaction_fees"}

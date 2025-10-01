@@ -42,7 +42,7 @@ func SubscribeNotifications(w http.ResponseWriter, r *http.Request) {
 }
 
 func sendNotification(transaction database.Transaction) {
-	walletOwners, err := database.GetWalletOwners(
+	userIds, err := database.GetUserIds(
 		transaction.Sender.WalletAddress,
 		transaction.Receiver.WalletAddress,
 	)
@@ -54,8 +54,8 @@ func sendNotification(transaction database.Transaction) {
 	conns := []*websocket.Conn{}
 
 	mutex.RLock()
-	for _, ownerId := range walletOwners {
-		conn, ok := subscribed[ownerId]
+	for _, userId := range userIds {
+		conn, ok := subscribed[userId]
 		if ok {
 			conns = append(conns, conn)
 		}

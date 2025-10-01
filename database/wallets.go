@@ -268,21 +268,22 @@ func ActivateWallet(walletAddress string) error {
 	return err
 }
 
-func GetWalletOwners(walletAddresses ...string) ([]int, error) {
-	if len(walletAddresses) == 0 {
+// Fetch user ids for users with provided wallet addresses or phone numbers
+func GetUserIds(aliases ...string) ([]int, error) {
+	if len(aliases) == 0 {
 		return []int{}, nil
 	}
 
 	// Build placeholders
-	placeholders := strings.Repeat("?,", len(walletAddresses))
+	placeholders := strings.Repeat("?,", len(aliases))
 	placeholders = placeholders[:len(placeholders)-1] // remove last comma
 
 	owners := []int{}
-	query := fmt.Sprintf("SELECT user_id FROM wallet_owners WHERE wallet_address IN (%s)", placeholders)
+	query := fmt.Sprintf("SELECT user_id FROM wallet_details WHERE wallet_address IN (%s) OR phone_no IN (%s)", placeholders, placeholders)
 
-	args := make([]any, len(walletAddresses))
-	for i, walletAddr := range walletAddresses {
-		args[i] = walletAddr
+	args := make([]any, len(aliases))
+	for i, alias := range aliases {
+		args[i] = alias
 	}
 
 	rows, err := db.Query(query, args...)

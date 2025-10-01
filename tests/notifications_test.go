@@ -13,19 +13,18 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func waitForNotifications(
+func waitForNotifications[T any](
 	ctx context.Context,
 	user User,
 	serverUrl string,
-	notifications chan<- database.Transaction,
-) error {
+) (<-chan T, error) {
 	accessToken := requireLogin(user)
 
 	log.Printf("%v waiting for transaction notifications\n", user.Username)
 
 	u, err := url.Parse(serverUrl)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Establish WebSocket connection
@@ -36,28 +35,38 @@ func waitForNotifications(
 	conn, resp, err := websocket.DefaultDialer.Dial(rawUrl, header)
 	if err != nil {
 		printResponse(resp, http.StatusOK)
-		return err
+		return nil, err
 	}
 	defer conn.Close()
 
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		default:
-			var transaction database.Transaction
+	notifications := make(chan T, 10)
 
-			err = conn.ReadJSON(&transaction)
-			if err != nil {
-				return fmt.Errorf("Expected message to be of type Transaction but found garbage data")
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				log.Println("notifications channel closed by caller")
+				close(notifications)
+				return
+			default:
+				var message T
+
+				err = conn.ReadJSON(&message)
+				if err != nil {
+					log.Printf("error reading notification message; %v\n", err)
+					close(notifications)
+					return
+				}
+
+				notifications <- message
 			}
-
-			notifications <- transaction
 		}
-	}
+	}()
+
+	return notifications, nil
 }
 
-func TestSubscribeNotifications(t *testing.T) {
+func TestNotifications(t *testing.T) {
 	// Get one of tommy's active wallets
 	tommysWallet, err := createWallet(tommy)
 	if err != nil {
@@ -71,20 +80,13 @@ func TestSubscribeNotifications(t *testing.T) {
 	}
 
 	// Lee waits for received transactions
-	notifications := make(chan database.Transaction)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go func() {
-		err = waitForNotifications(ctx, lee, testServer.URL, notifications)
-		if err != nil {
-			log.Fatalf("Error waiting for transaction notifications; %v\n", err)
-		}
-	}()
-
-	// Sleep for few seconds to give time for lee to start
-	// their notification listener
-	time.Sleep(2 * time.Second)
+	notifications, err := waitForNotifications[database.Transaction](ctx, lee, testServer.URL)
+	if err != nil {
+		log.Fatalf("Error establishing notifications channel; %v\n", err)
+	}
 
 	// Tommy sends money to lee
 	resp, err := sendMoney(
