@@ -85,16 +85,6 @@ func validateStruct(obj any) error {
 					return err
 				}
 			}
-			if rule == "accounts" {
-				values, _ := fieldValue.([]string)
-
-				for _, value := range values {
-					err := validateAccount(field.Name, value)
-					if err != nil {
-						return err
-					}
-				}
-			}
 			if rule == "amount" {
 				value, _ := fieldValue.(float64)
 				if err := validateAmount(value); err != nil {
@@ -126,10 +116,7 @@ func validateStruct(obj any) error {
 				}
 			}
 			if rule == "expires_at" {
-				str, ok := fieldValue.(string)
-				if !ok {
-					return fmt.Errorf("invalid expiry format; expected RFC3339 string")
-				}
+				str, _ := fieldValue.(string)
 
 				// Optional field; we only validate if value is provided
 				if !isEmpty(str) {
@@ -142,7 +129,19 @@ func validateStruct(obj any) error {
 						return fmt.Errorf("invalid expiry time; expiry time already passed")
 					}
 				}
+			}
+			if rule == "contributions" {
+				contributions, ok := fieldValue.([]Contribution)
+				if !ok {
+					return fmt.Errorf("expected participants to be of type []BillParticipant")
+				}
 
+				for _, c := range contributions {
+					err := validateStruct(c)
+					if err != nil {
+						return err
+					}
+				}
 			}
 		}
 	}

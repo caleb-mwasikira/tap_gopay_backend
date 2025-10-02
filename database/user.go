@@ -124,38 +124,26 @@ func isEmpty(value string) bool {
 	return strings.TrimSpace(value) == ""
 }
 
-func GetUserByEmailOrPhoneNo(email, phoneNo string) (*User, error) {
-	if !isEmpty(phoneNo) {
-		// Format phone number
-		num, err := phonenumbers.Parse(phoneNo, "KE")
+func GetUserIdFromEmailOrPhoneNo(email, phone string) (int, error) {
+	if !isEmpty(phone) {
+		// Format phone number into INTERNATIONAL format.
+		// This makes search for phone numbers more effective.
+		// Without this, searching the phone numbers 0789689745, +254789689745 and 0789 689 745
+		// will yield different results even though they are basically the same phone numbers.
+		number, err := phonenumbers.Parse(phone, "KE")
 		if err != nil {
-			return nil, err
+			return 0, err
 		}
-		phoneNo = phonenumbers.Format(num, phonenumbers.INTERNATIONAL)
+		phone = phonenumbers.Format(number, phonenumbers.INTERNATIONAL)
 	}
 
 	query := `
-		SELECT
-			id,
-			username,
-			email,
-			password,
-			phone_no,
-			role
+		SELECT id
 		FROM users WHERE email = ? OR phone_no= ?
 		LIMIT 1
 	`
-	row := db.QueryRow(query, email, phoneNo)
 
-	var user User
-
-	err := row.Scan(
-		&user.Id,
-		&user.Username,
-		&user.Email,
-		&user.Password,
-		&user.PhoneNo,
-		&user.Role,
-	)
-	return &user, err
+	var userId int
+	err := db.QueryRow(query, email, phone).Scan(&userId)
+	return userId, err
 }

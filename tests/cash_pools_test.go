@@ -283,28 +283,22 @@ func TestChamaWithdrawal(t *testing.T) {
 }
 
 func checkRefunds(t *testing.T, deposits []cashPoolDeposit, duration time.Duration) {
-	maxDuration := duration + (5 * time.Second)
+	<-time.After(duration)
 
-	select {
-	case <-time.After(maxDuration):
-		t.Fatalf("Tired of waiting")
+	// All users who sent funds to the cash pool
+	// should be refunded.
+	for _, deposit := range deposits {
+		expectedBalance := deposit.original
 
-	case <-time.After(duration):
-		// All users who sent funds to the cash pool
-		// should be refunded.
-		for _, deposit := range deposits {
-			expectedBalance := deposit.original
+		wallet, err := getWallet(deposit.user, deposit.walletAddress)
+		if err != nil {
+			t.Errorf("Error fetching wallet; %v\n", err)
+		}
 
-			wallet, err := getWallet(deposit.user, deposit.walletAddress)
-			if err != nil {
-				t.Errorf("Error fetching wallet; %v\n", err)
-			}
-
-			if wallet.Balance != expectedBalance {
-				t.Errorf("%v Wallet '%v' was never refunded KSH %v deposited into expired cash pool %v\n", COLOR_RED, wallet.WalletAddress, deposit.amountSent, COLOR_RESET)
-			} else {
-				log.Printf("%v Wallet '%v' refunded KSH %v deposited into expired cash pool %v\n", COLOR_GREEN, wallet.WalletAddress, deposit.amountSent, COLOR_RESET)
-			}
+		if wallet.Balance != expectedBalance {
+			t.Errorf("%v Wallet '%v' was never refunded KSH %v deposited into expired cash pool %v\n", COLOR_RED, wallet.WalletAddress, deposit.amountSent, COLOR_RESET)
+		} else {
+			log.Printf("%v Wallet '%v' refunded KSH %v deposited into expired cash pool %v\n", COLOR_GREEN, wallet.WalletAddress, deposit.amountSent, COLOR_RESET)
 		}
 	}
 }

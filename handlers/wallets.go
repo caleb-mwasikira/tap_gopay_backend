@@ -243,14 +243,14 @@ func AddWalletOwner(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newUser, err := database.GetUserByEmailOrPhoneNo(req.Email, req.PhoneNo)
+	newUserId, err := database.GetUserIdFromEmailOrPhoneNo(req.Email, req.PhoneNo)
 	if err != nil {
 		message := fmt.Sprintf("User '%v' or '%v' not found", req.Email, req.PhoneNo)
 		api.NotFound(w, message)
 		return
 	}
 
-	err = database.AddWalletOwner(loggedInUser.Id, newUser.Id, walletAddress)
+	err = database.AddWalletOwner(loggedInUser.Id, newUserId, walletAddress)
 	if err != nil {
 		api.Errorf(w, "Error adding wallet owner", err)
 		return
@@ -292,14 +292,14 @@ func RemoveWalletOwner(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch id of user to remove
-	userToRemove, err := database.GetUserByEmailOrPhoneNo(req.Email, req.PhoneNo)
+	removeUserId, err := database.GetUserIdFromEmailOrPhoneNo(req.Email, req.PhoneNo)
 	if err != nil {
 		message := fmt.Sprintf("User with email '%v' or phone number '%v' not found", req.Email, req.PhoneNo)
 		api.NotFound(w, message)
 		return
 	}
 
-	err = database.RemoveWalletOwner(loggedInUser.Id, userToRemove.Id, walletAddress)
+	err = database.RemoveWalletOwner(loggedInUser.Id, removeUserId, walletAddress)
 	if err != nil {
 		api.Errorf(w, "Error removing wallet owner", err)
 		return

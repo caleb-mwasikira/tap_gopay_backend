@@ -93,14 +93,12 @@ func GetCashPool(walletAddress string) (*CashPool, error) {
 	query := `
 		SELECT
 			creators_username,
-			creators_email,
 			pool_name,
 			pool_type,
 			description,
 			wallet_address,
 			target_amount,
 			receivers_username,
-			receivers_email,
 			receivers_wallet_address,
 			expires_at,
 			status,
@@ -111,14 +109,12 @@ func GetCashPool(walletAddress string) (*CashPool, error) {
 	`
 	err := db.QueryRow(query, walletAddress).Scan(
 		&p.Creator.Username,
-		&p.Creator.Email,
 		&p.PoolName,
 		&p.PoolType,
 		&p.Description,
 		&p.WalletAddress,
 		&p.TargetAmount,
 		&p.Receiver.Username,
-		&p.Receiver.Email,
 		&p.Receiver.WalletAddress,
 		&p.ExpiresAt,
 		&p.Status,

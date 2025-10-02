@@ -268,37 +268,77 @@ func ActivateWallet(walletAddress string) error {
 	return err
 }
 
-// Fetch user ids for users with provided wallet addresses or phone numbers
-func GetUserIds(aliases ...string) ([]int, error) {
-	if len(aliases) == 0 {
-		return []int{}, nil
+func formatPhoneNumber(phone string) (string, bool) {
+	if isEmpty(phone) {
+		return "", false
 	}
 
-	// Build placeholders
+	number, err := phonenumbers.Parse(phone, "KE")
+	if err != nil {
+		return "", false
+	}
+
+	ok := phonenumbers.IsValidNumber(number)
+	if ok {
+		phone = phonenumbers.Format(number, phonenumbers.INTERNATIONAL)
+		return phone, true
+	}
+	return "", false
+}
+
+// Aliases must either be valid emails, phone numbers, wallet addresses
+// or a combination of both
+func GetUserIds(aliases ...string) ([]int, error) {
+	if len(aliases) == 0 {
+		return nil, nil
+	}
+
+	// build placeholders (?, ?, ?)
 	placeholders := strings.Repeat("?,", len(aliases))
-	placeholders = placeholders[:len(placeholders)-1] // remove last comma
+	placeholders = placeholders[:len(placeholders)-1] // drop last comma
 
-	owners := []int{}
-	query := fmt.Sprintf("SELECT user_id FROM wallet_details WHERE wallet_address IN (%s) OR phone_no IN (%s)", placeholders, placeholders)
+	// build query
+	query := fmt.Sprintf(`
+		SELECT id AS user_id
+		FROM users
+		WHERE email IN (%s) OR phone_no IN (%s)
 
-	args := make([]any, len(aliases))
-	for i, alias := range aliases {
-		args[i] = alias
+		UNION ALL
+
+		SELECT user_id
+		FROM wallet_owners
+		WHERE wallet_address IN (%s)
+	`, placeholders, placeholders, placeholders)
+
+	// args = aliases x3 (for email, phone_no and wallet_address)
+	values := append(aliases, append(aliases, aliases...)...)
+	args := []any{}
+
+	for _, value := range values {
+		phone, ok := formatPhoneNumber(value)
+		if ok {
+			value = phone
+		}
+		args = append(args, value)
 	}
 
 	rows, err := db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
+
+	var userIds []int
 
 	for rows.Next() {
-		var owner int
-		if err = rows.Scan(&owner); err != nil {
+		var id int
+		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
-		owners = append(owners, owner)
+		userIds = append(userIds, id)
 	}
-	return owners, nil
+
+	return userIds, nil
 }
 
 // Adds user as wallet owner.

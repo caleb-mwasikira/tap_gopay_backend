@@ -125,8 +125,8 @@ func TestMain(m *testing.M) {
 	testServer = httptest.NewServer(r)
 	defer testServer.Close()
 
-	// Create test accounts for tommy, lee and bob
-	users := []User{tommy, lee, bob}
+	// Create test accounts
+	users := []User{tommy, lee, bob, chaoMin}
 	for _, user := range users {
 		resp, err := createAccount(user)
 		if err != nil {

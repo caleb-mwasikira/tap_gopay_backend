@@ -16,13 +16,10 @@ import (
 func waitForNotifications[T any](
 	ctx context.Context,
 	user User,
-	serverUrl string,
 ) (<-chan T, error) {
 	accessToken := requireLogin(user)
 
-	log.Printf("%v waiting for transaction notifications\n", user.Username)
-
-	u, err := url.Parse(serverUrl)
+	u, err := url.Parse(testServer.URL)
 	if err != nil {
 		return nil, err
 	}
@@ -37,28 +34,32 @@ func waitForNotifications[T any](
 		printResponse(resp, http.StatusOK)
 		return nil, err
 	}
-	defer conn.Close()
 
 	notifications := make(chan T, 10)
 
 	go func() {
+		defer func() {
+			close(notifications)
+			conn.Close()
+		}()
+
 		for {
 			select {
 			case <-ctx.Done():
 				log.Println("notifications channel closed by caller")
-				close(notifications)
 				return
+
 			default:
 				var message T
-
-				err = conn.ReadJSON(&message)
-				if err != nil {
+				if err := conn.ReadJSON(&message); err != nil {
 					log.Printf("error reading notification message; %v\n", err)
-					close(notifications)
 					return
 				}
-
-				notifications <- message
+				select {
+				case notifications <- message:
+				case <-ctx.Done(): // allow exit if caller cancels while sending
+					return
+				}
 			}
 		}
 	}()
@@ -83,7 +84,7 @@ func TestNotifications(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	notifications, err := waitForNotifications[database.Transaction](ctx, lee, testServer.URL)
+	notifications, err := waitForNotifications[database.Transaction](ctx, lee)
 	if err != nil {
 		log.Fatalf("Error establishing notifications channel; %v\n", err)
 	}

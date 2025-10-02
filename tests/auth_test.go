@@ -18,9 +18,10 @@ import (
 )
 
 var (
-	tommy = NewUser("tommy", "iamtommy@gmail.com", "tommyhasagun")
-	lee   = NewUser("leejohnson", "leejohnson@gmail.com", "johnsonsandjohnsons")
-	bob   = NewUser("bobthebuilder", "canwefixit@gmail.com", "yeswecan")
+	tommy   = NewUser("tommy", "iamtommy@gmail.com", "tommyhasagun")
+	lee     = NewUser("leejohnson", "leejohnson@gmail.com", "johnsonsandjohnsons")
+	bob     = NewUser("bobthebuilder", "canwefixit@gmail.com", "yeswecan")
+	chaoMin = NewUser("Chao Min", "chaominsrestaurant@yahoo.com", "お金を稼ぐ、私たちはスターだ")
 
 	cookiesCache = map[string][]*http.Cookie{}
 )
@@ -50,7 +51,7 @@ func NewRandomUser() User {
 	return User{
 		Username: gofakeit.Username(),
 		Email:    gofakeit.Email(),
-		Password: "2856",
+		Password: gofakeit.Password(true, true, true, true, false, 5),
 		PhoneNo:  randomPhoneNo(),
 	}
 }

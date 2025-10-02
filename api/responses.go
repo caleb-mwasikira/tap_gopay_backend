@@ -22,7 +22,7 @@ func Unauthorized(w http.ResponseWriter, message string, args ...any) {
 // Returns 401 Unauthorized response to the user.
 //
 //	message is displayed to the user
-//	err is logged if err != nil
+//	err is logged to stdout if err != nil
 func BadRequest(w http.ResponseWriter, message string, err error) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusBadRequest)

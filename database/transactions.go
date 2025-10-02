@@ -15,7 +15,6 @@ const (
 type WalletOwner struct {
 	UserId        int    `json:"-"`
 	Username      string `json:"username"`
-	Email         string `json:"email"`
 	PhoneNo       string `json:"phone_no"`
 	WalletAddress string `json:"wallet_address"`
 }

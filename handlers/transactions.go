@@ -138,7 +138,7 @@ func SendMoney(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	transaction, err := database.CreateTransaction(
+	t, err := database.CreateTransaction(
 		user.Id,
 		req.Sender, req.Receiver,
 		req.Amount, req.Fee,
@@ -150,13 +150,16 @@ func SendMoney(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go sendNotification(*transaction)
+	receivers := []string{
+		t.Sender.WalletAddress, t.Receiver.WalletAddress,
+	}
+	go sendNotification(*t, receivers...)
 
-	switch transaction.Status {
+	switch t.Status {
 	case "confirmed":
-		api.OK2(w, transaction)
+		api.OK2(w, t)
 	case "pending":
-		api.Accepted(w, transaction)
+		api.Accepted(w, t)
 	default:
 		// rejected
 		api.Errorf(w, "Transaction rejected", nil)

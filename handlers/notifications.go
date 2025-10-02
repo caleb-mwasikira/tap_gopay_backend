@@ -41,13 +41,14 @@ func SubscribeNotifications(w http.ResponseWriter, r *http.Request) {
 	mutex.Unlock()
 }
 
-func sendNotification(transaction database.Transaction) {
-	userIds, err := database.GetUserIds(
-		transaction.Sender.WalletAddress,
-		transaction.Receiver.WalletAddress,
-	)
+// Sends notifications to receivers if they are subscribed to
+// receiving notification messages.
+// Receivers must either be valid emails, phone numbers, wallet addresses
+// or a combination of both
+func sendNotification[T any](message T, receivers ...string) {
+	userIds, err := database.GetUserIds(receivers...)
 	if err != nil {
-		log.Printf("Error fetching wallet owners; %v\n", err)
+		log.Printf("Error fetching receivers user ids; %v\n", err)
 		return
 	}
 
@@ -63,7 +64,7 @@ func sendNotification(transaction database.Transaction) {
 	mutex.RUnlock()
 
 	for _, conn := range conns {
-		err := conn.WriteJSON(&transaction)
+		err := conn.WriteJSON(&message)
 		if err != nil {
 			log.Printf("Error notifying wallet owners of transaction; %v\n", err)
 		}

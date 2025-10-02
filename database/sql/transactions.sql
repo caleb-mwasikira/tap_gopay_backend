@@ -141,8 +141,8 @@ END
 
 
 CREATE TRIGGER `verifyCashPoolTransactions` BEFORE INSERT ON `transactions`
- FOR EACH ROW BEGIN
-	DECLARE is_withdrawing_from_cash_pool BOOLEAN;
+FOR EACH ROW BEGIN
+    DECLARE is_withdrawing_from_cash_pool BOOLEAN;
     DECLARE is_depositing_into_cash_pool BOOLEAN;
     DECLARE var_target_amount DECIMAL(10,2);
     DECLARE var_collected_amount DECIMAL(10,2);
@@ -164,6 +164,13 @@ CREATE TRIGGER `verifyCashPoolTransactions` BEFORE INSERT ON `transactions`
             IF var_cash_pool_type <> 'chama' AND NEW.receiver != var_cash_pool_receiver THEN
                 SIGNAL SQLSTATE '45000'
                 SET MESSAGE_TEXT="Receiver specified does not match the expected recipient for this payment";
+            END IF;
+
+            -- If pool type is a split_bill, ensure withdrawal amount
+            -- is >= target amount
+            IF var_cash_pool_type = 'split_bill' AND NEW.amount < var_target_amount THEN
+                SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT="Please enter an amount greater than or equal to the bill's target amount";
             END IF;
 
             -- Restrict withdrawal from cash pool if target amount is not achieved
